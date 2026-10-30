@@ -24,7 +24,7 @@ sst_load_modules() {
 
 # 主菜单顺序；未列出的模块按注册顺序追加
 sst_sort_modules() {
-  local -a preferred=(system network tune bench docker apps site tools components security backup settings)
+  local -a preferred=(init system network tune bench docker apps site tools components security backup settings)
   local -a sorted=()
   local name
   for name in "${preferred[@]}"; do
@@ -76,6 +76,7 @@ sst_help() {
 用法：st [--yes] [--no-color] <模块> <操作> [参数...]
 
 模块与常用命令：
+  init      开荒向导      st init | preflight | disk scan | basics | status | report
   system    系统维护      st system info | update | clean_deep | dns | timezone | hostname | rootpass | portscan | cron | shortcut
   network   网络测试      st network info | ip | speed [MB] | ping [host] | route [host] | dns | port
   tune      系统优化      st tune status | sysctl on/off | swap create/remove | ipv6 4/6 | mirror aliyun

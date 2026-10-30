@@ -36,6 +36,18 @@ ssh_current_port() {
   printf '%s' "$port"
 }
 
+ssh_all_ports() {
+  local ports=''
+  if have sshd && [[ ${EUID:-1} -eq 0 ]]; then
+    ports=$(sshd -T 2>/dev/null | awk '$1 == "port" {print $2}' | sort -u | paste -sd, -)
+  fi
+  if [[ -z $ports ]]; then
+    ports=$(awk 'tolower($1) == "port" && $1 !~ /^#/ {print $2}' \
+      "$(sshd_config_file)" 2>/dev/null | sort -u | paste -sd, -)
+  fi
+  printf '%s' "${ports:-22}"
+}
+
 svc_state_text() {
   if svc_active "$1"; then printf '运行中'; else printf '未运行'; fi
 }

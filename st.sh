@@ -30,6 +30,8 @@ set -- "${args[@]}"
 source "$SST_HOME/core/common.sh"
 # shellcheck source=core/config.sh
 source "$SST_HOME/core/config.sh"
+# shellcheck source=core/wizard.sh
+source "$SST_HOME/core/wizard.sh"
 # shellcheck source=core/apps.sh
 source "$SST_HOME/core/apps.sh"
 # shellcheck source=core/scripts.sh
