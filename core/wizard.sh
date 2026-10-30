@@ -3,20 +3,26 @@
 
 SST_WIZARD_DIR="$SST_DATA_DIR/init"
 SST_WIZARD_STATE="$SST_WIZARD_DIR/state.conf"
-SST_WIZARD_STEPS=(preflight disk basics report)
+SST_WIZARD_STEPS=(preflight disk basics accounts ssh firewall report)
 
 wizard_init() {
   mkdir -p "$SST_WIZARD_DIR" 2>/dev/null || true
   chmod 700 "$SST_WIZARD_DIR" 2>/dev/null || true
   if [[ ! -f $SST_WIZARD_STATE ]]; then
     {
-      printf 'VERSION=1\n'
+      printf 'VERSION=2\n'
       printf 'STARTED_AT=%s\n' "$(date '+%F %T')"
       for s in "${SST_WIZARD_STEPS[@]}"; do
         printf 'STEP_%s=pending\n' "$s"
       done
     } >"$SST_WIZARD_STATE"
     chmod 600 "$SST_WIZARD_STATE" 2>/dev/null || true
+  else
+    local s
+    for s in "${SST_WIZARD_STEPS[@]}"; do
+      grep -qE "^STEP_${s}=" "$SST_WIZARD_STATE" 2>/dev/null || printf 'STEP_%s=pending\n' "$s" >>"$SST_WIZARD_STATE"
+    done
+    grep -qE '^VERSION=' "$SST_WIZARD_STATE" || printf 'VERSION=2\n' >>"$SST_WIZARD_STATE"
   fi
 }
 
@@ -54,6 +60,9 @@ wizard_step_label() {
     preflight) printf '服务器预检' ;;
     disk) printf '磁盘检测与挂载' ;;
     basics) printf '基础信息' ;;
+    accounts) printf '账户设置' ;;
+    ssh) printf 'SSH 安全' ;;
+    firewall) printf '防火墙与防护' ;;
     report) printf '验收报告' ;;
     *) printf '%s' "$1" ;;
   esac
@@ -69,6 +78,10 @@ wizard_status_table() {
   [[ -n $(wizard_get TIMEZONE) ]] && kv "时区" "$(wizard_get TIMEZONE)"
   [[ -n $(wizard_get DNS) ]] && kv "DNS" "$(wizard_get DNS)"
   [[ -n $(wizard_get DATA_DISKS) ]] && kv "数据盘" "$(wizard_get DATA_DISKS)"
+  [[ -n $(wizard_get ADMIN_USER) ]] && kv "管理用户" "$(wizard_get ADMIN_USER)"
+  [[ -n $(wizard_get SSH_NEW_PORT) ]] && kv "SSH 新端口" "$(wizard_get SSH_NEW_PORT)"
+  [[ -n $(wizard_get SSH_STATUS) ]] && kv "SSH 状态" "$(wizard_get SSH_STATUS)"
+  [[ -n $(wizard_get FIREWALL) ]] && kv "防火墙" "$(wizard_get FIREWALL)"
 }
 
 wizard_report_write() {
@@ -99,13 +112,20 @@ wizard_report_write() {
     printf '| SSH 端口 | %s |\n' "$(ssh_all_ports 2>/dev/null || ssh_current_port 2>/dev/null || echo 22)"
     printf '| root 登录 | %s |\n' "$(ssh_cfg_get PermitRootLogin 2>/dev/null || echo 未知)"
     printf '| 密码登录 | %s |\n' "$(ssh_cfg_get PasswordAuthentication 2>/dev/null || echo 未知)"
+    printf '| 管理用户 | %s |\n' "$(wizard_get ADMIN_USER 未创建)"
     printf '| 防火墙 | %s |\n' "$(_fw_installed 2>/dev/null || echo 未知)"
+    printf '| Fail2ban | %s |\n' "$(have fail2ban-client && svc_state_text fail2ban || echo 未安装)"
     printf '| TCP 算法 | %s |\n' "$(sysctl -n net.ipv4.tcp_congestion_control 2>/dev/null || echo 未知)"
     printf '| 数据盘 | %s |\n' "$(wizard_get DATA_DISKS 未挂载)"
     printf '\n## 后续建议\n\n'
-    printf '1. 用新终端验证 SSH 可登录后再关闭旧端口或会话。\n'
-    printf '2. 按需执行：st security ssh_status / st security firewall_status。\n'
-    printf '3. 定期运行：st backup create /etc /var/www。\n'
+    if [[ -n $(wizard_get SSH_NEW_PORT) ]]; then
+      printf '1. 用新终端验证：ssh -p %s 用户@%s\n' "$(wizard_get SSH_NEW_PORT)" "$(get_public_ip)"
+      printf '2. 确认可登录后执行：st init ssh keep\n'
+    else
+      printf '1. 用新终端验证 SSH 可登录后再关闭旧端口或会话。\n'
+    fi
+    printf '3. 按需执行：st security ssh_status / st security firewall_status。\n'
+    printf '4. 定期运行：st backup create /etc /var/www。\n'
   } >"$file"
   chmod 600 "$file"
   printf '%s\n' "$file"

@@ -395,15 +395,21 @@ security_fail2ban_status() {
 
 security_fail2ban_install() {
   require_root
-  confirm "安装 Fail2ban 并启用 sshd 防护（5 次失败封禁 1 小时）？" || return 0
+  local no_confirm=${1:-}
+  [[ $no_confirm == --yes ]] || { confirm "安装 Fail2ban 并启用 sshd 防护（5 次失败封禁 1 小时）？" || return 0; }
   pkg_update || die "软件源更新失败"
   pkg_install fail2ban || die "Fail2ban 安装失败"
 
-  local port backend
-  port=$(ssh_current_port)
-  [[ $port =~ ^[0-9]+$ ]] || port=22
+  local ports backend ignore client_ip
+  ports=$(ssh_all_ports | tr ',' ' ')
+  [[ -n $ports ]] || ports=22
   backend="auto"
   [[ ${INIT:-sysv} == systemd ]] && backend="systemd"
+  ignore="127.0.0.1/8 ::1"
+  if [[ -n ${SSH_CLIENT:-} ]]; then
+    client_ip=${SSH_CLIENT%% *}
+    [[ -n $client_ip ]] && ignore="$ignore $client_ip"
+  fi
 
   mkdir -p /etc/fail2ban/jail.d
   cat >/etc/fail2ban/jail.d/sst-sshd.conf <<EOF
@@ -412,10 +418,11 @@ backend = $backend
 bantime = 1h
 findtime = 10m
 maxretry = 5
+ignoreip = $ignore
 
 [sshd]
 enabled = true
-port = $port
+port = $ports
 EOF
 
   svc_enable fail2ban || die "Fail2ban 服务启动失败"

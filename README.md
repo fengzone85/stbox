@@ -11,7 +11,7 @@
 
 | 模块 | 功能 |
 |---|---|
-| 开荒向导 | 服务器预检、磁盘检测与已有文件系统挂载、时区/主机名/DNS/时间同步/更新策略、验收报告 |
+| 开荒向导 | 服务器预检、磁盘检测与已有文件系统挂载、时区/主机名/DNS/时间同步/更新策略、账户、SSH 改端口、防火墙与 Fail2ban、验收报告 |
 | 系统维护 | 系统概览、环境信息、负载、磁盘、更新、深度清理、DNS、时区、主机名、root 密码、端口扫描、cron、快捷命令 |
 | 网络测试 | 网卡/IP/归属地、下载测速、ping、路由追踪、DNS 检测、端口连通、监听端口 |
 | 系统优化 | sysctl 网络参数、SWAP 创建/移除、IPv4/IPv6 优先级、apt 换源 |
@@ -59,6 +59,11 @@ st init                  # 开始/继续开荒（需交互终端）
 st init preflight        # 服务器预检
 st init disk scan        # 只读磁盘扫描
 st init basics           # 基础信息设置
+st init accounts         # 账户设置（root 密码/管理用户）
+st init ssh              # SSH 端口/密码登录/root 登录
+st init ssh keep         # 验证新端口后保留配置
+st init ssh rollback     # 立即回滚 SSH
+st init firewall         # 防火墙与 Fail2ban
 st init status           # 查看进度
 st init report           # 生成开荒报告
 
@@ -113,20 +118,26 @@ st backup list
 
 ## 开荒向导
 
-用于新 VPS / 新服务器的安全初始化，当前版本包含：
+用于新 VPS / 新服务器的安全初始化，包含：
 
 - **预检**：系统、CPU/内存/磁盘、SWAP、公网 IP、SSH 端口与登录策略、防火墙、Docker、BBR、密钥状态
 - **磁盘检测**：只读列出设备、分区、文件系统、UUID、SSD/HDD、系统盘链路；可协助挂载已有文件系统
 - **基础信息**：时区、主机名、时间同步、DNS、更新策略
+- **账户**：root 密码自定义/随机、创建管理用户 + sudo + 密钥
+- **SSH**：默认新增非 22 端口并保留旧端口、禁用密码登录、root 登录策略
+- **防火墙**：UFW/firewalld 默认拒绝入站，放行全部 SSH 端口，可选 80/443，可选 Fail2ban
 - **状态与报告**：进度保存在 `data/init/state.conf`，报告写入 `data/init/report-*.md`
 
 安全性约定：
 
 - 向导**不提供磁盘格式化**，只在已有文件系统上协助挂载
 - 挂载前拒绝系统盘、swap、LVM、RAID、LUKS；自动备份 `/etc/fstab`
-- 写入 `UUID + nofail`，挂载失败自动恢复 fstab
+- SSH 改端口采用“新增端口 + 保留旧端口”，验证后再决定是否清理旧端口
+- SSH 变更默认启用 10 分钟自动回滚；`st init ssh keep` 确认保留，`st init ssh rollback` 立即回滚
+- 禁用密码登录前检查 `authorized_keys`；禁止 root SSH 前验证管理用户密钥与 sudo
+- 防火墙启用前自动放行全部 SSH 端口
+- 自动更新由用户选择，不默认开启
 - 报告权限 600，不保存密码/私钥
-- 账户、SSH 端口、密码登录、防火墙等高风险步骤将在下一阶段加入，并配套自动回滚
 
 ## 应用市场
 

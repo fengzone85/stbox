@@ -3,7 +3,7 @@
 > 面向 Linux 服务器的模块化脚本工具箱，采用 **核心框架 + 内置模块 + 应用/脚本插件** 三层结构，
 > 同时提供交互菜单与命令行调用。
 
-版本基线：v0.3.3（已在 Debian 13 / J4125 完成实测）
+版本基线：v0.3.4（已在 Debian 13 / J4125 完成实测）
 
 ---
 
@@ -256,7 +256,7 @@ scripts_run <name>
 
 ---
 
-## 8. 命令规范（v0.3.3）
+## 8. 命令规范（v0.3.4）
 
 ```
 st                                  交互主菜单
@@ -266,7 +266,8 @@ st version                          版本与路径
 st system   info | env | load | disk | clean | update | clean_deep
             dns [地址...] | timezone [时区] | hostname [名称] | rootpass
             portscan [目标] [端口数] | cron [list|add|remove] | shortcut [字母]
-st init     wizard | preflight | disk [scan] | basics | status | report | reset
+st init     wizard | preflight | disk [scan] | basics | accounts
+            ssh [keep|rollback|status] | firewall | status | report | reset
 st network  info | ip | speed [MB] | ping [host] | route [host] | dns | port | listen
 st tune     status | sysctl [status|on|off] | swap [status|create|remove]
             ipv6 [status|4|6] | mirror [aliyun|tuna|ustc|163|restore]
@@ -386,13 +387,16 @@ st help
 
 新 VPS / 新服务器初始化向导，入口为 `st init`，主菜单第一项。
 
-### 13.1 当前实现（P1）
+### 13.1 当前实现
 
 | 步骤 | 内容 |
 |---|---|
 | 预检 | 系统、CPU/内存/磁盘、SWAP、公网 IP、SSH 端口与登录策略、防火墙、Docker、BBR、密钥状态 |
 | 磁盘 | 只读扫描设备/分区/文件系统/UUID/SSD-HDD/系统盘链路；协助挂载已有文件系统 |
 | 基础信息 | 时区、主机名、时间同步、DNS、更新策略 |
+| 账户 | root 密码、管理用户 + sudo + 密钥 |
+| SSH | 新增非 22 端口并保留旧端口、密码登录、root 登录、10 分钟自动回滚 |
+| 防火墙 | UFW/firewalld、放行全部 SSH 端口、可选 80/443、Fail2ban |
 | 报告 | 进度写入 `data/init/state.conf`，报告写入 `data/init/report-*.md`（600 权限） |
 
 命令：
@@ -402,6 +406,9 @@ st init
 st init preflight
 st init disk [scan]
 st init basics
+st init accounts
+st init ssh [keep|rollback|status]
+st init firewall
 st init status
 st init report
 st init reset
@@ -414,14 +421,22 @@ st init reset
 - 自动备份 `/etc/fstab`，使用 UUID + `nofail`
 - 挂载失败自动恢复 fstab 并卸载
 
-### 13.2 下一阶段（P2）
+### 13.2 安全默认与 SSH 回滚
 
-- 账户：root 密码、管理用户 + sudo + 密钥
-- SSH：默认改为非 22 端口（新增端口并保留旧端口验证）、禁用密码登录、root 登录策略
-- 防火墙：默认拒绝入站，放行全部 SSH 端口，再按需放行 80/443
-- Fail2ban：写入全部 SSH 端口
-- SSH 变更 10 分钟自动回滚，确认保留后取消
-- 支持范围：Debian/Ubuntu、RHEL/Fedora/Rocky/Alma、Alpine 尽量覆盖；不再支持 CentOS
+- SSH 改端口：新增随机高位端口并保留旧端口，验证通过后再决定清理
+- 禁用密码登录前检查可用 `authorized_keys`
+- 禁止 root SSH 前必须验证管理用户密钥与 sudo
+- 防火墙启用前放行全部 SSH 端口，默认只开 SSH，80/443 按需选择
+- SSH 变更默认启用 10 分钟自动回滚：
+  - 变更前备份 `/etc/ssh/sshd_config` 与 `sshd_config.d`
+  - `systemd-run` 创建一次性定时器
+  - `st init ssh keep` 取消定时器并确认保留
+  - `st init ssh rollback` 立即恢复备份
+  - 超时未确认则自动恢复并重启 sshd
 - 自动安全更新由用户选择，不默认开启
+- 支持范围：Debian/Ubuntu、RHEL/Fedora/Rocky/Alma、Alpine 尽量覆盖；不再支持 CentOS
 
-P2 实现前需要先修正 `sshd_config.d` 覆盖、多 SSH 端口放行、管理用户验证等已知问题，详见核查记录。
+### 13.3 后续
+
+- sysctl 安全 profile、SWAP、BBR 等系统加固
+- 失败场景的更多自动化测试（端口冲突、sshd 校验失败、防火墙失败）

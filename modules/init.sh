@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# 模块：开荒向导（P1：预检 / 磁盘检测与已有文件系统挂载 / 基础信息 / 报告）
+# 模块：开荒向导（预检 / 磁盘 / 基础信息 / 账户 / SSH / 防火墙 / 报告）
 
-sst_register_module init "开荒向导" "预检 磁盘 基础信息"
-SST_MODULE_ITEMS[init]=$'wizard|开始/继续开荒\npreflight|服务器预检\ndisk|磁盘检测与挂载\nbasics|基础信息设置\nstatus|查看进度\nreport|生成报告\nreset|重置向导'
+sst_register_module init "开荒向导" "预检 磁盘 账户 SSH 防火墙"
+SST_MODULE_ITEMS[init]=$'wizard|开始/继续开荒\npreflight|服务器预检\ndisk|磁盘检测与挂载\nbasics|基础信息设置\naccounts|账户设置\nssh|SSH 安全\nfirewall|防火墙与防护\nstatus|查看进度\nreport|生成报告\nreset|重置向导'
 
 init_status() {
   require_root
@@ -476,6 +476,648 @@ init_basics() {
   ok "基础信息步骤完成"
 }
 
+# ---------- P2：账户 ----------
+
+init_admin_ready() {
+  local user home
+  user=$(wizard_get ADMIN_USER)
+  [[ -n $user ]] || return 1
+  getent passwd "$user" >/dev/null 2>&1 || return 1
+  home=$(getent passwd "$user" | cut -d: -f6)
+  [[ -n $home && -s "$home/.ssh/authorized_keys" ]] || return 1
+  sudo -l -U "$user" >/dev/null 2>&1 || return 1
+  return 0
+}
+
+init_key_ready() {
+  local user home
+  user=$(wizard_get ADMIN_USER)
+  if [[ -n $user ]]; then
+    home=$(getent passwd "$user" | cut -d: -f6)
+    [[ -n $home && -s "$home/.ssh/authorized_keys" ]] && return 0
+  fi
+  [[ -s /root/.ssh/authorized_keys ]]
+}
+
+init_set_root_password() {
+  local p1 p2
+  read -r -s -p "新的 root 密码: " p1 || return 1
+  printf '\n'
+  read -r -s -p "再次输入: " p2 || return 1
+  printf '\n'
+  [[ -n $p1 && $p1 == "$p2" ]] || die "两次密码不一致或为空"
+  (( ${#p1} >= 8 )) || die "密码至少需要 8 位"
+  printf 'root:%s\n' "$p1" | chpasswd || die "root 密码修改失败"
+  wizard_set ROOT_PASSWORD changed
+  ok "root 密码已修改"
+}
+
+init_generate_root_password() {
+  local p
+  p=$(tr -dc 'A-Za-z0-9' </dev/urandom | head -c 20)
+  [[ -n $p ]] || die "密码生成失败"
+  printf 'root:%s\n' "$p" | chpasswd || die "root 密码修改失败"
+  wizard_set ROOT_PASSWORD changed
+  ok "root 密码已更新：$p"
+  warn "请立即保存该密码，之后不再显示"
+}
+
+init_create_admin_user() {
+  local username=$1 mode=$2 shell home group=''
+  [[ $username =~ ^[A-Za-z][A-Za-z0-9_-]*$ ]] || die "用户名格式无效"
+  [[ $username != root ]] || die "不能使用 root 作为管理用户名"
+
+  if ! getent passwd "$username" >/dev/null 2>&1; then
+    shell=/bin/sh
+    have bash && shell=/bin/bash
+    if have useradd; then
+      useradd -m -s "$shell" "$username" || die "创建用户失败"
+    else
+      adduser -D -s "$shell" "$username" || die "创建用户失败"
+    fi
+  else
+    info "用户 $username 已存在，继续配置"
+  fi
+
+  if getent group sudo >/dev/null 2>&1; then
+    group=sudo
+  elif getent group wheel >/dev/null 2>&1; then
+    group=wheel
+  fi
+  if [[ -n $group ]]; then
+    if have usermod; then
+      usermod -aG "$group" "$username" 2>/dev/null || warn "加入 $group 组失败"
+    else
+      adduser "$username" "$group" 2>/dev/null || warn "加入 $group 组失败"
+    fi
+  else
+    warn "未找到 sudo/wheel 组，请手动配置 sudo 权限"
+  fi
+
+  home=$(getent passwd "$username" | cut -d: -f6)
+  [[ -n $home ]] || die "无法读取用户 home 目录"
+
+  case $mode in
+    key)
+      [[ -s /root/.ssh/authorized_keys ]] || die "root 没有可用密钥，无法复制到管理用户"
+      mkdir -p "$home/.ssh"
+      cp /root/.ssh/authorized_keys "$home/.ssh/authorized_keys"
+      chown -R "$username":"$(id -gn "$username")" "$home/.ssh"
+      chmod 700 "$home/.ssh"
+      chmod 600 "$home/.ssh/authorized_keys"
+      ;;
+    password)
+      local p1 p2
+      read -r -s -p "管理用户密码: " p1 || return 1
+      printf '\n'
+      read -r -s -p "再次输入: " p2 || return 1
+      printf '\n'
+      [[ -n $p1 && $p1 == "$p2" ]] || die "两次密码不一致或为空"
+      (( ${#p1} >= 8 )) || die "密码至少需要 8 位"
+      printf '%s:%s\n' "$username" "$p1" | chpasswd || die "设置用户密码失败"
+      ;;
+    *) die "未知认证方式：$mode" ;;
+  esac
+
+  getent passwd "$username" >/dev/null 2>&1 || die "用户创建校验失败"
+  if [[ $mode == key ]] && [[ ! -s "$home/.ssh/authorized_keys" ]]; then
+    die "管理用户密钥写入失败"
+  fi
+  if have sudo; then
+    sudo -l -U "$username" >/dev/null 2>&1 || warn "sudo 权限验证失败，请手动检查"
+  fi
+  wizard_set ADMIN_USER "$username"
+  wizard_set ADMIN_AUTH "$mode"
+  ok "管理用户已配置：$username（$mode）"
+}
+
+init_accounts() {
+  wizard_init
+  require_root
+  [[ -t 0 ]] || die "账户设置需要在交互终端运行"
+  local choice user
+  section "账户设置"
+
+  section "[1/2] root 密码"
+  printf '  1) 保持当前密码（确认已足够强）\n  2) 自定义新密码\n  3) 生成随机强密码（推荐）\n  4) 跳过\n  0) 保存退出\n'
+  read -r -p "请选择: " choice || return 0
+  case $choice in
+    1) wizard_set ROOT_PASSWORD kept ;;
+    2) init_set_root_password ;;
+    3) init_generate_root_password ;;
+    4) ;;
+    0|q|back) return 0 ;;
+    *) warn "无效选项" ;;
+  esac
+
+  section "[2/2] 管理用户"
+  printf '  1) 不创建，仅使用 root（简单场景）\n  2) 创建管理用户并复制 root 密钥（推荐）\n  3) 创建管理用户并设置密码\n  4) 使用已有用户\n  5) 跳过\n  0) 保存退出\n'
+  read -r -p "请选择: " choice || return 0
+  case $choice in
+    1|5) ;;
+    2)
+      user=$(ask "管理用户名" "admin")
+      init_create_admin_user "$user" key
+      ;;
+    3)
+      user=$(ask "管理用户名" "admin")
+      init_create_admin_user "$user" password
+      ;;
+    4)
+      user=$(ask "已有用户名" "feng")
+      getent passwd "$user" >/dev/null 2>&1 || die "用户不存在：$user"
+      wizard_set ADMIN_USER "$user"
+      wizard_set ADMIN_AUTH existing
+      if have sudo; then
+        sudo -l -U "$user" >/dev/null 2>&1 || warn "该用户 sudo 验证失败"
+      fi
+      ok "已记录管理用户：$user"
+      ;;
+    0|q|back) return 0 ;;
+    *) warn "无效选项" ;;
+  esac
+
+  wizard_mark accounts done
+  ok "账户设置步骤完成"
+}
+
+# ---------- P2：SSH ----------
+
+init_ssh_snapshot() {
+  local ts file
+  local -a paths=(etc/ssh/sshd_config)
+  [[ -d /etc/ssh/sshd_config.d ]] && paths+=(etc/ssh/sshd_config.d)
+  ts=$(date +%Y%m%d-%H%M%S)
+  file="$SST_WIZARD_DIR/ssh-backup-$ts.tar.gz"
+  tar -czf "$file" -C / "${paths[@]}" || return 1
+  chmod 600 "$file"
+  wizard_set SSH_BACKUP "$file"
+  printf '%s\n' "$file"
+}
+
+init_ssh_restore_config() {
+  local backup service
+  backup=$(wizard_get SSH_BACKUP)
+  [[ -f $backup ]] || { err "SSH 备份不存在，无法回滚"; return 1; }
+  rm -f /etc/ssh/sshd_config.d/00-stbox-port.conf /etc/ssh/sshd_config.d/00-stbox-auth.conf 2>/dev/null || true
+  tar -xzf "$backup" -C / || { err "SSH 配置恢复失败"; return 1; }
+  service=$(ssh_service_name)
+  svc_restart "$service" || { err "SSH 服务重启失败"; return 1; }
+  ok "SSH 配置已恢复"
+}
+
+init_ssh_dropin_set() {
+  local file=$1 key=$2 value=$3 tmp
+  mkdir -p /etc/ssh/sshd_config.d
+  touch "$file"
+  tmp=$(mktemp)
+  awk -v k="$key" -v v="$value" '
+    BEGIN { IGNORECASE = 1; done = 0 }
+    {
+      if (tolower($1) == tolower(k)) {
+        if (!done) { print k " " v; done = 1 } else { print "#" $0 }
+      } else {
+        print $0
+      }
+    }
+    END { if (!done) print k " " v }
+  ' "$file" >"$tmp"
+  cat "$tmp" >"$file"
+  rm -f "$tmp"
+  chmod 644 "$file"
+}
+
+init_ssh_apply_port() {
+  local new=$1 old_ports p f
+  old_ports=$(ssh_all_ports | tr ',' ' ')
+  if grep -qE '^[[:space:]]*Include[[:space:]]+.*sshd_config\.d' /etc/ssh/sshd_config 2>/dev/null; then
+    f=/etc/ssh/sshd_config.d/00-stbox-port.conf
+    {
+      printf '# managed by stbox\n'
+      for p in $old_ports $new; do printf 'Port %s\n' "$p"; done
+    } >"$f"
+    chmod 644 "$f"
+  else
+    for p in $old_ports $new; do
+      ssh_add_port "$p" >/dev/null || return 1
+    done
+  fi
+}
+
+init_ssh_apply_auth() {
+  local pass=$1 root=$2
+  [[ -n $pass || -n $root ]] || return 0
+  if grep -qE '^[[:space:]]*Include[[:space:]]+.*sshd_config\.d' /etc/ssh/sshd_config 2>/dev/null; then
+    local f=/etc/ssh/sshd_config.d/00-stbox-auth.conf
+    [[ -n $pass ]] && init_ssh_dropin_set "$f" PasswordAuthentication "$pass"
+    [[ -n $root ]] && init_ssh_dropin_set "$f" PermitRootLogin "$root"
+  else
+    [[ -n $pass ]] && ssh_set_option PasswordAuthentication "$pass"
+    [[ -n $root ]] && ssh_set_option PermitRootLogin "$root"
+  fi
+}
+
+init_ssh_verify() {
+  local new=$1 pass=$2 root=$3 ports p actual
+  sshd -t || return 1
+  if [[ -n $new ]]; then
+    ports=$(ssh_all_ports | tr ',' ' ')
+    for p in $ports; do [[ $p == "$new" ]] && break; done
+    [[ $p == "$new" ]] || return 1
+  fi
+  if [[ -n $pass ]]; then
+    actual=$(ssh_cfg_get PasswordAuthentication)
+    [[ $actual == "$pass" ]] || return 1
+  fi
+  if [[ -n $root ]]; then
+    actual=$(ssh_cfg_get PermitRootLogin)
+    [[ $actual == "$root" || ($root == prohibit-password && $actual == without-password) ]] || return 1
+  fi
+  return 0
+}
+
+init_allow_ssh_port_now() {
+  local port=$1 fw
+  fw=$(_fw_installed)
+  case $fw in
+    ufw)
+      if ufw status 2>/dev/null | grep -qi active; then
+        ufw allow "$port/tcp" >/dev/null 2>&1 || warn "UFW 放行新 SSH 端口失败"
+      fi
+      ;;
+    firewalld)
+      if svc_active firewalld; then
+        firewall-cmd --permanent --add-port="$port/tcp" >/dev/null 2>&1 || true
+        firewall-cmd --reload >/dev/null 2>&1 || true
+      fi
+      ;;
+  esac
+}
+
+init_ssh_cancel_timer() {
+  local unit
+  unit=$(wizard_get SSH_TIMER_UNIT)
+  [[ -n $unit ]] || unit=stbox-ssh-rollback
+  if have systemctl; then
+    systemctl stop "$unit.timer" "$unit.service" >/dev/null 2>&1 || true
+    systemctl reset-failed "$unit.timer" "$unit.service" >/dev/null 2>&1 || true
+  fi
+  wizard_set SSH_TIMER_UNIT ''
+}
+
+init_ssh_arm_timer() {
+  local minutes=$1 unit=stbox-ssh-rollback
+  (( minutes > 0 )) || return 0
+  if [[ ${INIT:-sysv} != systemd ]] || ! have systemd-run; then
+    warn "当前环境不支持 systemd 定时回滚，请手动验证并保留配置"
+    return 0
+  fi
+  init_ssh_cancel_timer
+  wizard_set SSH_KEEP 0
+  wizard_set SSH_SERVICE "$(ssh_service_name)"
+  wizard_set ROLLBACK_LOG "$SST_WIZARD_DIR/ssh-rollback.log"
+  if systemd-run --collect --unit="$unit" --on-active="${minutes}m" \
+    --timer-property=AccuracySec=1s /bin/bash "$SST_HOME/core/ssh-rollback.sh" "$SST_WIZARD_STATE"; then
+    wizard_set SSH_TIMER_UNIT "$unit"
+    wizard_set SSH_TIMER_MIN "$minutes"
+    ok "已启用 ${minutes} 分钟自动回滚；确认可登录后执行 st init ssh keep"
+  else
+    warn "自动回滚定时器创建失败，请手动验证 SSH"
+  fi
+}
+
+init_ssh_apply_changes() {
+  require_root
+  local new=$1 pass=$2 root=$3 minutes=$4 service
+  [[ -n $new || -n $pass || -n $root ]] || return 0
+  init_ssh_snapshot >/dev/null || die "备份 SSH 配置失败"
+  wizard_set SSH_NEW_PORT "$new"
+  wizard_set SSH_PASS_AUTH "$pass"
+  wizard_set SSH_ROOT_LOGIN "$root"
+  wizard_set SSH_STATUS applying
+  service=$(ssh_service_name)
+  wizard_set SSH_SERVICE "$service"
+
+  if ! (
+    [[ -n $new ]] && init_ssh_apply_port "$new"
+    init_ssh_apply_auth "$pass" "$root"
+    init_ssh_verify "$new" "$pass" "$root"
+  ); then
+    init_ssh_restore_config || true
+    die "SSH 配置校验失败，已回滚"
+  fi
+
+  [[ -n $new ]] && init_allow_ssh_port_now "$new"
+  init_ssh_arm_timer "$minutes"
+
+  if ! svc_restart "$service"; then
+    init_ssh_cancel_timer
+    init_ssh_restore_config || true
+    die "SSH 服务重启失败，已回滚"
+  fi
+  sleep 1
+  if [[ -n $new ]] && ! ss -tln 2>/dev/null | awk '{print $4}' | grep -q ":$new$"; then
+    init_ssh_cancel_timer
+    init_ssh_restore_config || true
+    die "新端口 $new 未监听，已回滚"
+  fi
+  wizard_set SSH_STATUS applied
+  ok "SSH 配置已应用"
+}
+
+init_ssh_keep() {
+  require_root
+  wizard_init
+  if [[ $(wizard_get SSH_ROLLBACK) == done ]]; then
+    die "SSH 配置已自动回滚，不能确认保留；请重新执行 st init ssh"
+  fi
+  init_ssh_cancel_timer
+  wizard_set SSH_KEEP 1
+  wizard_set SSH_STATUS kept
+  wizard_mark ssh done
+  ok "已确认保留 SSH 配置，自动回滚已取消"
+  if [[ -f $SST_WIZARD_DIR/ssh-rollback.log ]]; then
+    info "回滚日志：$SST_WIZARD_DIR/ssh-rollback.log"
+  fi
+}
+
+init_ssh_rollback() {
+  require_root
+  wizard_init
+  init_ssh_cancel_timer
+  wizard_set SSH_KEEP 0
+  bash "$SST_HOME/core/ssh-rollback.sh" "$SST_WIZARD_STATE" || die "SSH 回滚失败"
+  wizard_set SSH_STATUS rolledback
+  wizard_mark ssh skipped
+  ok "SSH 配置已回滚"
+}
+
+init_ssh() {
+  local action=${1:-}
+  case $action in
+    keep) init_ssh_keep; return 0 ;;
+    rollback) init_ssh_rollback; return 0 ;;
+    status)
+      section "SSH 向导状态"
+      kv "状态" "$(wizard_get SSH_STATUS 未执行)"
+      kv "新端口" "$(wizard_get SSH_NEW_PORT 未设置)"
+      kv "自动回滚" "$([[ -n $(wizard_get SSH_TIMER_MIN) ]] && echo "$(wizard_get SSH_TIMER_MIN) 分钟" || echo 未启用)"
+      kv "回滚结果" "$(wizard_get SSH_ROLLBACK 未执行)"
+      return 0
+      ;;
+  esac
+
+  wizard_init
+  require_root
+  [[ -t 0 ]] || die "SSH 设置需要在交互终端运行"
+  local old_ports new_port='' pass='' root='' minutes=10 choice login_user current_root
+  old_ports=$(ssh_all_ports)
+  current_root=$(ssh_cfg_get PermitRootLogin)
+  section "SSH 安全设置"
+  kv "当前端口" "$old_ports"
+  kv "密码登录" "$(ssh_cfg_get PasswordAuthentication)"
+  kv "root 登录" "$current_root"
+  kv "管理用户" "$(wizard_get ADMIN_USER 未创建)"
+
+  section "[1/4] SSH 端口"
+  printf '  1) 新增随机高位端口，保留旧端口（推荐）\n  2) 新增 2222，保留旧端口\n  3) 自定义新端口，保留旧端口\n  4) 保持当前端口\n  0) 保存退出\n'
+  read -r -p "请选择: " choice || return 0
+  case $choice in
+    1)
+      local i
+      for i in 1 2 3 4 5; do
+        new_port=$(shuf -i 20000-65000 -n 1 2>/dev/null || echo $((20000 + RANDOM % 45000)))
+        ssh_all_ports | tr ',' '\n' | grep -qx "$new_port" && continue
+        ss -tln 2>/dev/null | awk '{print $4}' | grep -q ":$new_port$" || break
+      done
+      ;;
+    2) new_port=2222 ;;
+    3) new_port=$(ask "新 SSH 端口" "2222") ;;
+    4) new_port='' ;;
+    0|q|back) return 0 ;;
+    *) warn "无效选项"; return 0 ;;
+  esac
+  if [[ -n $new_port ]]; then
+    valid_port "$new_port" || die "端口无效：$new_port"
+    ssh_all_ports | tr ',' '\n' | grep -qx "$new_port" && die "端口 $new_port 已存在"
+    if ss -tln 2>/dev/null | awk '{print $4}' | grep -q ":$new_port$"; then
+      die "端口 $new_port 已被其他服务占用"
+    fi
+  fi
+
+  section "[2/4] 密码登录"
+  printf '  1) 禁用密码登录，仅允许密钥（有密钥时推荐）\n  2) 保持当前设置\n  3) 开启密码登录\n  0) 保存退出\n'
+  read -r -p "请选择: " choice || return 0
+  case $choice in
+    1)
+      init_key_ready || die "未发现可用 authorized_keys，不能禁用密码登录"
+      pass=no
+      ;;
+    2) pass='' ;;
+    3) pass=yes ;;
+    0|q|back) return 0 ;;
+    *) warn "无效选项"; return 0 ;;
+  esac
+
+  section "[3/4] root 登录"
+  if init_admin_ready; then
+    info "管理用户已通过密钥/sudo 验证，推荐选择 2) 完全禁止 root SSH"
+  else
+    info "未验证管理用户，推荐选择 1) prohibit-password"
+  fi
+  printf '  1) prohibit-password，root 仅允许密钥（推荐）\n  2) no，完全禁止 root SSH（需管理用户可用）\n  3) 保持当前设置\n  4) yes，允许 root 密码登录（高风险）\n  0) 保存退出\n'
+  read -r -p "请选择: " choice || return 0
+  case $choice in
+    1) root=prohibit-password ;;
+    2)
+      init_admin_ready || die "管理用户未通过密钥/sudo 验证，不能禁止 root SSH"
+      root=no
+      ;;
+    3) root='' ;;
+    4) root=yes; warn "允许 root 密码登录会降低安全性" ;;
+    0|q|back) return 0 ;;
+    *) warn "无效选项"; return 0 ;;
+  esac
+
+  if [[ ${INIT:-sysv} == systemd ]] && have systemd-run; then
+    section "[4/4] 自动回滚"
+    printf '  1) 10 分钟（推荐）\n  2) 5 分钟\n  3) 20 分钟\n  4) 不启用自动回滚\n  0) 保存退出\n'
+    read -r -p "请选择: " choice || return 0
+    case $choice in
+      1) minutes=10 ;;
+      2) minutes=5 ;;
+      3) minutes=20 ;;
+      4) minutes=0 ;;
+      0|q|back) return 0 ;;
+      *) minutes=10 ;;
+    esac
+  else
+    minutes=0
+    warn "当前环境不支持自动回滚定时器，请手动验证 SSH"
+  fi
+
+  section "即将应用"
+  kv "SSH 端口" "${new_port:-保持 $old_ports}"
+  kv "密码登录" "${pass:-保持}"
+  kv "root 登录" "${root:-保持}"
+  kv "自动回滚" "$([[ $minutes -gt 0 ]] && echo "${minutes} 分钟" || echo 未启用)"
+  confirm "应用以上 SSH 设置？请保持当前会话不要关闭" || return 0
+
+  if [[ -z $new_port && -z $pass && -z $root ]]; then
+    wizard_mark ssh done
+    info "SSH 设置未变化"
+    return 0
+  fi
+
+  init_ssh_apply_changes "$new_port" "$pass" "$root" "$minutes"
+
+  login_user=$(wizard_get ADMIN_USER)
+  [[ -n $login_user ]] || login_user=root
+  local port_show=${new_port:-$old_ports}
+  info "请在新终端验证：ssh -p ${port_show} ${login_user}@$(get_public_ip)"
+  printf '\n  1) 已验证，保留配置（推荐）\n  2) 未验证，立即回滚\n  3) 保留定时器，稍后执行 st init ssh keep\n  0) 保持当前选择并返回\n\n'
+  read -r -p "请选择: " choice || return 0
+  case $choice in
+    1) init_ssh_keep ;;
+    2) init_ssh_rollback ;;
+    3)
+      wizard_set SSH_KEEP 0
+      if [[ $minutes -eq 0 ]]; then
+        warn "未启用自动回滚，请尽快执行 st init ssh keep 或 rollback"
+      fi
+      ;;
+    0|q|back) ;;
+    *) warn "无效选项" ;;
+  esac
+}
+
+init_firewall_apply_ufw() {
+  local -a extra=("$@")
+  local ports p
+  require_root
+  if ! have ufw; then
+    pkg_update || die "软件源更新失败"
+    pkg_install ufw || die "ufw 安装失败"
+  fi
+  if [[ -f /etc/default/ufw ]]; then
+    backup_config_file /etc/default/ufw ufw-defaults >/dev/null 2>&1 || true
+    if grep -q '^IPV6=' /etc/default/ufw; then
+      sed -i 's/^IPV6=.*/IPV6=yes/' /etc/default/ufw
+    else
+      printf 'IPV6=yes\n' >>/etc/default/ufw
+    fi
+  fi
+  ports=$(ssh_all_ports | tr ',' ' ')
+  for p in $ports; do
+    valid_port "$p" && ufw allow "$p/tcp" >/dev/null || warn "放行 SSH 端口 $p 失败"
+  done
+  for p in "${extra[@]}"; do
+    [[ -n $p ]] || continue
+    valid_port "$p" && ufw allow "$p/tcp" >/dev/null || warn "放行端口 $p 失败"
+  done
+  ufw --force enable || die "UFW 启用失败"
+  ufw status verbose || true
+  wizard_set FIREWALL "ufw"
+  wizard_set FIREWALL_PORTS "$ports ${extra[*]}"
+  ok "UFW 已启用，SSH 端口：$ports"
+}
+
+init_firewall_apply_firewalld() {
+  local -a extra=("$@")
+  local ports p
+  require_root
+  if ! have firewall-cmd; then
+    pkg_update || die "软件源更新失败"
+    pkg_install firewalld || die "firewalld 安装失败"
+  fi
+  svc_enable firewalld || die "firewalld 启动失败"
+  firewall-cmd --permanent --add-service=ssh >/dev/null 2>&1 || true
+  ports=$(ssh_all_ports | tr ',' ' ')
+  for p in $ports "${extra[@]}"; do
+    [[ -n $p ]] || continue
+    valid_port "$p" && firewall-cmd --permanent --add-port="$p/tcp" >/dev/null 2>&1 || true
+  done
+  firewall-cmd --reload >/dev/null || die "firewalld 重载失败"
+  firewall-cmd --list-all 2>/dev/null || true
+  wizard_set FIREWALL "firewalld"
+  wizard_set FIREWALL_PORTS "$ports ${extra[*]}"
+  ok "firewalld 已启用，SSH 端口：$ports"
+}
+
+init_firewall() {
+  wizard_init
+  require_root
+  [[ -t 0 ]] || die "防火墙设置需要在交互终端运行"
+  local fw state choice ports_input p
+  local -a extra=()
+  fw=$(_fw_installed)
+  state=$(_ufw_state)
+  section "防火墙与防护"
+  kv "当前防火墙" "$fw / $state"
+  kv "SSH 端口" "$(ssh_all_ports)"
+  kv "Docker" "$(have docker && echo 已安装 || echo 未安装)"
+  [[ $(have docker && echo yes) == yes ]] && warn "UFW 不能完全保护 Docker 发布的端口"
+
+  printf '\n  1) 跳过，不修改防火墙\n  2) UFW：默认拒绝入站，只放行 SSH（推荐）\n  3) UFW：默认拒绝入站，放行 SSH + 80/443\n  4) UFW：默认拒绝入站，放行 SSH + 自定义端口\n  5) firewalld：放行 SSH + 自定义端口\n  6) 关闭现有防火墙（不推荐）\n  0) 保存退出\n\n'
+  read -r -p "请选择: " choice || return 0
+  case $choice in
+    1) wizard_set FIREWALL skipped ;;
+    2) init_firewall_apply_ufw ;;
+    3) init_firewall_apply_ufw 80 443 ;;
+    4)
+      ports_input=$(ask "额外放行端口（空格/逗号分隔）" "80 443")
+      ports_input=${ports_input//,/ }
+      for p in $ports_input; do
+        valid_port "$p" || die "端口无效：$p"
+        extra+=("$p")
+      done
+      init_firewall_apply_ufw "${extra[@]}"
+      ;;
+    5)
+      ports_input=$(ask "额外放行端口（空格/逗号分隔）" "80 443")
+      ports_input=${ports_input//,/ }
+      for p in $ports_input; do
+        valid_port "$p" || die "端口无效：$p"
+        extra+=("$p")
+      done
+      init_firewall_apply_firewalld "${extra[@]}"
+      ;;
+    6)
+      confirm "关闭防火墙会使端口直接暴露，确认关闭？" || return 0
+      if [[ $fw == ufw ]]; then
+        ufw --force disable || die "UFW 关闭失败"
+        wizard_set FIREWALL disabled
+      elif [[ $fw == firewalld ]]; then
+        systemctl disable --now firewalld >/dev/null 2>&1 || true
+        wizard_set FIREWALL disabled
+      else
+        warn "没有可关闭的 ufw/firewalld"
+      fi
+      ;;
+    0|q|back) return 0 ;;
+    *) warn "无效选项"; return 0 ;;
+  esac
+
+  section "Fail2ban"
+  printf '  1) 安装并启用 sshd 防护（推荐）\n  2) 跳过\n  3) 查看状态\n  0) 跳过\n'
+  read -r -p "请选择: " choice || return 0
+  case $choice in
+    1)
+      if security_fail2ban_install --yes; then
+        wizard_set FAIL2BAN installed
+      else
+        warn "Fail2ban 安装未完成"
+      fi
+      ;;
+    2|0|q|back) ;;
+    3) security_fail2ban_status ;;
+    *) warn "无效选项" ;;
+  esac
+
+  wizard_mark firewall done
+  ok "防火墙与防护步骤完成"
+}
+
 init_report() {
   require_root
   local file
@@ -524,8 +1166,35 @@ init_wizard() {
     fi
   fi
 
+  if [[ $(wizard_step_status accounts) != done ]]; then
+    init_accounts
+    if [[ $(wizard_step_status accounts) != done ]]; then
+      warn "账户步骤未完成，已保存进度"
+      return 0
+    fi
+  fi
+
+  if [[ $(wizard_step_status ssh) != done ]]; then
+    if [[ $(wizard_get SSH_STATUS) == applied ]]; then
+      warn "SSH 配置正在等待验证：新开终端测试后执行 st init ssh keep 或 rollback"
+      return 0
+    fi
+    init_ssh
+    if [[ $(wizard_step_status ssh) != done ]]; then
+      warn "SSH 步骤未完成，已保存进度"
+      return 0
+    fi
+  fi
+
+  if [[ $(wizard_step_status firewall) != done ]]; then
+    init_firewall
+    if [[ $(wizard_step_status firewall) != done ]]; then
+      warn "防火墙步骤未完成，已保存进度"
+      return 0
+    fi
+  fi
+
   init_report
   wizard_status_table
-  ok "P1 开荒流程完成：预检、磁盘、基础信息、报告"
-  info "账户、SSH 端口、密码登录、防火墙将在下一阶段（P2）加入"
+  ok "开荒流程完成：预检、磁盘、基础信息、账户、SSH、防火墙、报告"
 }

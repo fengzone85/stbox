@@ -76,7 +76,7 @@ sst_help() {
 用法：st [--yes] [--no-color] <模块> <操作> [参数...]
 
 模块与常用命令：
-  init      开荒向导      st init | preflight | disk scan | basics | status | report
+  init      开荒向导      st init | preflight | disk scan | basics | accounts | ssh | firewall | report
   system    系统维护      st system info | update | clean_deep | dns | timezone | hostname | rootpass | portscan | cron | shortcut
   network   网络测试      st network info | ip | speed [MB] | ping [host] | route [host] | dns | port
   tune      系统优化      st tune status | sysctl on/off | swap create/remove | ipv6 4/6 | mirror aliyun
