@@ -189,7 +189,7 @@ Compose 助手（`core/apps.sh`）：
 | 函数 | 说明 |
 |---|---|
 | `app_compose_up <name>` | 从 stdin 读取 YAML，写入 `data/apps/<name>/docker-compose.yml` 并 `up -d` |
-| `app_compose_down <name>` | `down --remove-orphans`，不删除命名卷 |
+| `app_compose_down <name>` | `down --remove-orphans`，成功后删除 Compose 文件，不删除命名卷 |
 | `app_compose_ps <name>` | 查看项目容器状态 |
 | `app_data_dir <name>` | 返回应用数据目录 |
 | `app_installed <name>` | 是否存在 Compose 文件（菜单“已部署”标记） |

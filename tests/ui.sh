@@ -273,6 +273,10 @@ check_not_contains "无影响行" "$out" "影响："
 check_not_contains "无回滚行" "$out" "回滚："
 check_eq "无附加信息仍调用确认" 1 "$CONFIRM_CALLS"
 
+section "日志降级"
+out=$(SST_LOG=/sys/stbox-test.log sst_log INFO "日志降级" 2>&1)
+check_eq "日志不可写时静默" "" "$out"
+
 section "测试结果"
 kv "通过" "$PASS"
 kv "失败" "$FAIL"

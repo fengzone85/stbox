@@ -17,6 +17,10 @@ source "$SST_HOME/core/menu.sh"
 source "$SST_HOME/modules/ai.sh"
 
 WORK_DIR=$(mktemp -d /tmp/stbox-ai-test.XXXXXX)
+SST_CONFIG_DIR="$WORK_DIR/config"
+SST_DATA_DIR="$WORK_DIR/data"
+SST_LOG="$WORK_DIR/sst.log"
+mkdir -p "$SST_CONFIG_DIR" "$SST_DATA_DIR"
 trap 'rm -rf "$WORK_DIR"' EXIT
 
 PASS=0

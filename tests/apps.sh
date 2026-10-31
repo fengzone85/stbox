@@ -112,6 +112,10 @@ services:
 YAML
 check_eq "app_installed 检测 Compose 文件" 0 "$(app_installed demo; echo $?)"
 
+compose_run() { return 0; }
+app_compose_down demo >/dev/null 2>&1
+check_eq "移除后删除 Compose 文件" 1 "$(app_installed demo; echo $?)"
+
 section "Web IDE 安全提示"
 out=$(app_webide_notice 8443 2>&1)
 if [[ $out == *"HTTPS"* && $out == *"SSH 隧道"* ]]; then

@@ -21,7 +21,7 @@ sst_init_dirs() {
 sst_log() {
   local level=$1
   shift
-  printf '%s [%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$level" "$*" >>"$SST_LOG" 2>/dev/null || true
+  { printf '%s [%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$level" "$*" >>"$SST_LOG"; } 2>/dev/null || true
 }
 info() { ui_status info "$*"; sst_log INFO "$*"; }
 ok()   { ui_status ok "$*"; sst_log OK "$*"; }

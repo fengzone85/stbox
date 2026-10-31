@@ -82,7 +82,8 @@ app_compose_down() {
   local name=$1 dir
   dir=$(app_data_dir "$name")
   [[ -f $dir/docker-compose.yml ]] || return 0
-  compose_run -f "$dir/docker-compose.yml" down --remove-orphans
+  compose_run -f "$dir/docker-compose.yml" down --remove-orphans || return 1
+  rm -f "$dir/docker-compose.yml"
 }
 
 app_compose_ps() {
