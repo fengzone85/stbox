@@ -95,6 +95,12 @@ else
   pass "未知工具解析失败"
 fi
 
+if ( ai_install bogus ) >/dev/null 2>&1; then
+  fail "install 未知工具应失败"
+else
+  pass "install 未知工具返回非零"
+fi
+
 mkdir -p "$WORK_DIR/bin"
 cat >"$WORK_DIR/bin/fakeai" <<'EOF'
 #!/usr/bin/env bash

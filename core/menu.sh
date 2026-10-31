@@ -125,7 +125,7 @@ sst_help() {
     docker    Docker 管理   st docker status | install | ps | exec | images | networks | volumes | compose | prune | uninstall
     apps      应用市场      st apps list | menu | install <名称> | remove <名称> | status <名称>
     site     建站环境      st site install | status | add | wordpress | proxy | ssl | list | remove | backup | uninstall
-    ai        AI 工具       st ai status | list | install | version | update [工具] | remove [工具]
+    ai        AI 工具       st ai status | list | install [工具] | version | update [工具] | remove [工具]
                              快捷安装：st ai claude | codex | gemini | qoder | codebuddy | ccswitch
 
   安全与运维

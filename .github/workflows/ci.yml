@@ -24,6 +24,8 @@ jobs:
         run: bash tests/ai.sh
       - name: App plugin tests
         run: bash tests/apps.sh
+      - name: Menu dispatch tests
+        run: bash tests/menu.sh
 
   container-smoke:
     runs-on: ubuntu-latest
@@ -44,4 +46,5 @@ jobs:
             bash /src/tests/scripts.sh
             bash /src/tests/ai.sh
             bash /src/tests/apps.sh
+            bash /src/tests/menu.sh
           '

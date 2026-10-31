@@ -282,7 +282,7 @@ st docker   status | install | ps | logs [容器] | restart|start|stop|exec [容
             images | networks | volumes | prune | compose | uninstall
 st apps     list | menu | install <名称> | remove <名称> | status <名称>
 st site     install | status | add | wordpress | proxy | ssl | list | remove | backup | update | uninstall
-st ai       status | list | install | version | update [工具] | remove [工具]
+st ai       status | list | install [工具] | version | update [工具] | remove [工具]
             快捷安装：claude | codex | gemini | qoder | codebuddy | opencode | ccswitch
 st tools    disk_mount | git | rclone | fclone | scripts | probes | panels | nodes | proxy | kernel
             warp | bbr3 | oracle | reinstall | nat | <脚本名>

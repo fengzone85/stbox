@@ -374,6 +374,16 @@ ai_install_menu() {
   ai_install_tool "${AI_IDS[$((choice - 1))]}"
 }
 
+ai_install() {
+  local id=${1:-}
+  if [[ -z $id ]]; then
+    ai_install_menu
+    return
+  fi
+  id=$(ai_resolve_id "$id") || die "未知 AI 工具：$1"
+  ai_install_tool "$id"
+}
+
 ai_docs() {
   local id
   section "官方地址"
