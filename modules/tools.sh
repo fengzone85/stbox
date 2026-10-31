@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# 模块：实用工具（磁盘挂载、常用软件、第三方面板/代理脚本入口）
+# 模块：实用工具（磁盘挂载、常用软件、探针/面板/节点/代理脚本入口）
 
-sst_register_module tools "实用工具" "磁盘 安装 面板 代理"
-SST_MODULE_ITEMS[tools]=$'disk_mount|磁盘挂载与 fstab\ngit|安装/升级 Git\nrclone|安装 Rclone\nscripts|第三方工具脚本\naria2|Aria2 安装管理\nnezha|哪吒探针\nbaota|宝塔面板\nmtp|MTP&TLS 代理\nipt|IPTables 工具\nfclone|Fclone 安装\nbbrkernel|BBR 内核（CentOS）\nbbrmanage|BBR 一键管理\nchangesource|第三方换源脚本\nwarp|WARP 管理（ChatGPT/Netflix）\nbbr3|BBR3/tcpx 管理\nnodes|节点搭建脚本合集\npanels|面板安装脚本\noracle|甲骨文云脚本\nreinstall|一键重装系统\nnat|NAT 小鸡管理'
+sst_register_module tools "实用工具" "磁盘 工具 探针 面板 代理"
+SST_MODULE_ITEMS[tools]=$'disk_mount|磁盘挂载与 fstab\ngit|安装/升级 Git\nrclone|安装 Rclone\nfclone|Fclone 安装\nscripts|第三方工具脚本\naria2|Aria2 安装管理\nipt|IPTables 工具\nchangesource|第三方换源脚本\nprobes|监控探针（Nezha/Komari/Diting）\npanels|面板安装脚本\nnodes|节点搭建脚本合集\nproxy|代理与转发脚本\nkernel|内核与 BBR 脚本\nbbr3|BBR3/tcpx 管理\nbbrmanage|BBR 一键管理\nbbrkernel|BBR 内核（CentOS）\nwarp|WARP 管理（ChatGPT/Netflix）\nmtp|MTP&TLS 代理\nnezha|哪吒探针\nkomari|Komari 探针\nditing|Diting 探针\nbaota|宝塔面板\noracle|甲骨文云脚本\nreinstall|DD/重装脚本\nnat|NAT 小鸡管理'
 
 tools_disk_mount() {
   require_root
@@ -150,8 +150,11 @@ tools_fclone() {
 tools_scripts() { scripts_menu 工具; }
 tools_warp() { scripts_run warp; }
 tools_bbr3() { scripts_run bbr3; }
+tools_probes() { scripts_menu 探针; }
 tools_nodes() { scripts_menu 节点; }
 tools_panels() { scripts_menu 面板; }
+tools_proxy() { scripts_menu 代理; }
+tools_kernel() { scripts_menu 内核; }
 tools_oracle() { scripts_menu 甲骨文; }
 tools_reinstall() { scripts_menu 重装; }
 tools_nat() { scripts_menu NAT; }

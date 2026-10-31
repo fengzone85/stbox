@@ -5,11 +5,11 @@ declare -A SST_MODULE_TITLE=() SST_MODULE_DESC=() SST_MODULE_ITEMS=()
 declare -A SST_MODULE_GROUP=(
   [init]=0
   [system]=1 [network]=1 [tune]=1 [bench]=1
-  [docker]=2 [apps]=2 [site]=2
+  [docker]=2 [apps]=2 [site]=2 [ai]=2
   [security]=3 [backup]=3 [tools]=3 [components]=3
   [settings]=4
 )
-SST_MODULE_GROUPS=(开荒与初始化 系统与网络 应用与部署 安全与维护 设置)
+SST_MODULE_GROUPS=(开荒与初始化 系统与网络 应用与部署 安全与运维 设置)
 SST_MODULE_ORDER=()
 SST_BANNER_KERNEL=''
 
@@ -33,7 +33,7 @@ sst_load_modules() {
 
 # 主菜单顺序；未列出的模块按注册顺序追加
 sst_sort_modules() {
-  local -a preferred=(init system network tune bench docker apps site tools components security backup settings)
+  local -a preferred=(init system network tune bench docker apps site ai security backup tools components settings)
   local -a sorted=()
   local name
   for name in "${preferred[@]}"; do
@@ -125,12 +125,13 @@ sst_help() {
     docker    Docker 管理   st docker status | install | ps | exec | images | networks | volumes | compose | prune | uninstall
     apps      应用市场      st apps list | menu | install <名称> | remove <名称> | status <名称>
     site     建站环境      st site install | status | add | wordpress | proxy | ssl | list | remove | backup | uninstall
+    ai        AI 工具       st ai status | list | install | claude | codex | gemini | qoder | codebuddy | ccswitch
 
-  安全与维护
+  安全与运维
     security  安全与优化    st security status | firewall_status | firewall_allow <端口>
                              BBR/SSH/Fail2ban：st security bbr_on | ssh_status | fail2ban_install
     backup    备份与迁移    st backup list | create [路径...] | restore | schedule | remote
-    tools     实用工具      st tools disk_mount | git | rclone | fclone | warp | bbr3 | nodes | panels | oracle | nat
+    tools     实用工具      st tools disk_mount | git | rclone | probes | panels | nodes | proxy | kernel | oracle | nat
     components 组件环境     st components list | install | install_all | remove | python | nodejs | golang | java | workspace
 
   设置

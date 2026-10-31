@@ -58,7 +58,7 @@ done
 (( FAIL == 0 )) && pass "所有脚本字段完整"
 
 section "新增脚本条目"
-for name in nodebench tcpquality autotrace nodequality ipcheck taier hardware-info acme ansible cf-tunnel image realm gost; do
+for name in nodebench tcpquality autotrace nodequality ipcheck taier hardware-info acme ansible cf-tunnel image realm gost komari diting reinstall-bin456789 reinstall-moeclub reinstall-fcurrk reinstall-windows; do
   if script_exists "$name"; then
     pass "新增脚本：$name"
   else

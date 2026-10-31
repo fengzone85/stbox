@@ -3,7 +3,7 @@
 > 面向 Linux 服务器的模块化脚本工具箱，采用 **核心框架 + 内置模块 + 应用/脚本插件** 三层结构，
 > 同时提供交互菜单与命令行调用。
 
-版本基线：v0.4.0（已在 Debian 13 / J4125 完成主要功能实测）
+版本基线：v0.5.0（已在 Debian 13 / J4125 完成主要功能实测）
 
 ---
 
@@ -85,7 +85,8 @@ stbox/
 │   ├── docker.sh          # 安装 / 状态 / 容器 / 镜像 / 网络 / 卷 / 清理
 │   ├── apps.sh            # 应用市场
 │   ├── site.sh            # 建站环境（静态站 / WordPress / 反代 / SSL）
-│   ├── tools.sh           # 磁盘挂载 / Git / Rclone / 面板代理入口
+│   ├── ai.sh              # Claude Code / Codex / Gemini / OpenCode 等 AI 工具
+│   ├── tools.sh           # 磁盘挂载 / Git / Rclone / 探针面板代理入口
 │   ├── components.sh      # 常用组件 / Python Node Go Java / tmux 工作区
 │   ├── security.sh        # 防火墙 / SSH / BBR / Fail2ban
 │   ├── backup.sh          # 备份 / 恢复 / 定时 / 远程
@@ -98,6 +99,7 @@ stbox/
 │   ├── qbittorrent/       # BT 下载
 │   ├── cloudreve/ memos/  # 网盘 / 备忘录
 │   ├── code-server/       # Web VS Code
+│   ├── vscode/            # OpenVSCode Server（VS Code Docker）
 │   ├── adguardhome/       # DNS 去广告
 │   └── qinglong/          # 定时任务面板
 ├── scripts/               # 第三方脚本清单
@@ -257,7 +259,7 @@ scripts_run <name>
 
 ---
 
-## 8. 命令规范（v0.4.0）
+## 8. 命令规范（v0.5.0）
 
 ```
 st                                  交互主菜单
@@ -278,8 +280,9 @@ st docker   status | install | ps | logs [容器] | restart|start|stop|exec [容
             images | networks | volumes | prune | compose | uninstall
 st apps     list | menu | install <名称> | remove <名称> | status <名称>
 st site     install | status | add | wordpress | proxy | ssl | list | remove | backup | update | uninstall
-st tools    disk_mount | git | rclone | fclone | scripts | warp | bbr3
-            nodes | panels | oracle | reinstall | nat | <脚本名>
+st ai       status | list | install | claude | codex | gemini | qoder | codebuddy | opencode | ccswitch
+st tools    disk_mount | git | rclone | fclone | scripts | probes | panels | nodes | proxy | kernel
+            warp | bbr3 | oracle | reinstall | nat | <脚本名>
 st components list | install | install_all | remove | custom
             python | nodejs | golang | java | uninstall_env | workspace
 st security status | firewall_status | firewall_allow <端口> | firewall_enable | firewall_disable
@@ -352,6 +355,7 @@ st --no-color version
 bash -n st.sh core/*.sh modules/*.sh apps/*/app.sh install.sh
 bash tests/ui.sh
 bash tests/scripts.sh
+bash tests/ai.sh
 # 可选：shellcheck -x st.sh core/*.sh modules/*.sh
 ```
 

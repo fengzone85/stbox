@@ -3,7 +3,7 @@
 面向 Linux 服务器的模块化脚本工具箱，使用 Bash 编写，同时提供交互菜单和命令行调用。
 
 - 分层结构：核心框架 + 内置模块 + 应用/脚本插件
-- 13 个功能模块、11 个 Docker 应用、66 个外部脚本入口
+- 14 个功能模块、12 个 Docker 应用、72 个外部脚本入口
 - 已在 Debian 13 / Intel J4125 完成主要功能实测
 - 所有系统级操作默认需要确认，配置变更前自动备份
 
@@ -19,7 +19,8 @@
 | Docker | 安装、状态、容器、日志、进入容器、镜像、网络、数据卷、Compose 项目启停/更新、清理、卸载 |
 | 应用市场 | 一键部署常用 Docker 应用 |
 | 建站环境 | Apache + PHP 8.2 + MariaDB + Redis，静态站、WordPress、反向代理、SSL、站点备份 |
-| 实用工具 | 磁盘挂载、Git、Rclone、Fclone、WARP、BBR3、节点/面板/甲骨文/NAT/重装入口 |
+| AI 工具 | Claude Code、Codex、Gemini CLI、Qoder 国际版/CN、CodeBuddy 国际版/国内版、Grok Build、OpenCode、OpenClaw、Hermes、Pi、MiniMax Code、Kimi Code、Oh My Pi、CC Switch CLI 部署 |
+| 实用工具 | 磁盘挂载、Git、Rclone、Fclone、WARP、BBR3、Nezha/Komari/Diting 探针、节点/面板/代理/甲骨文/NAT/多套 DD 重装入口 |
 | 组件环境 | 22 个常用组件与游戏、Python/Node.js/Go/Java、Ansible、tmux 工作区 |
 | 安全与优化 | UFW/firewalld、SSH 端口与登录策略、BBR、Fail2ban |
 | 备份迁移 | 目录备份、MySQL 导出、恢复、定时任务、远程传输 |
@@ -55,7 +56,7 @@ st --plain version # 无色、ASCII 边框
 ## 界面预览
 
 ```text
-╭─ STBOX 0.4.0 ────────────────────────────────────────╮
+╭─ STBOX 0.5.0 ────────────────────────────────────────╮
 │ SSH Tool Box · Debian 13 · 内核 6.1                  │
 │ feng-5100 · SSH 22 · UFW active · BBR bbr            │
 │ 开荒向导 3/8 完成 · 下一步：账户设置                 │
@@ -177,6 +178,7 @@ st backup list
 | qBittorrent | 8080 | BT 下载面板 |
 | Cloudreve | 5212 | 私有云盘 |
 | code-server | 8443 | Web VS Code |
+| VS Code Docker | 8444 | OpenVSCode Server，Token 访问 |
 | AdGuard Home | 3000 | DNS 去广告 |
 | Memos | 5230 | 网页备忘录 |
 | 青龙面板 | 5700 | 定时任务管理 |
@@ -249,6 +251,7 @@ demo_info() { echo "info"; }
 bash -n st.sh install.sh core/*.sh modules/*.sh apps/*/app.sh scripts/*.conf
 bash tests/ui.sh
 bash tests/scripts.sh
+bash tests/ai.sh
 sudo bash tests/init_hardening.sh
 ```
 

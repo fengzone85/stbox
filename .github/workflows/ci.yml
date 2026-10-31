@@ -20,6 +20,8 @@ jobs:
         run: bash tests/ui.sh
       - name: Script catalog tests
         run: bash tests/scripts.sh
+      - name: AI module tests
+        run: bash tests/ai.sh
 
   container-smoke:
     runs-on: ubuntu-latest
@@ -38,4 +40,5 @@ jobs:
             bash /src/st.sh --no-color version
             bash /src/tests/ui.sh
             bash /src/tests/scripts.sh
+            bash /src/tests/ai.sh
           '

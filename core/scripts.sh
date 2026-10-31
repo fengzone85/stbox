@@ -5,7 +5,7 @@
 # 字段：
 #   SCRIPT_TITLE    显示名称
 #   SCRIPT_DESC     功能说明
-#   SCRIPT_CATEGORY 测试 / 工具 / 面板 / 代理 / 内核
+#   SCRIPT_CATEGORY 测试 / 工具 / 探针 / 面板 / 节点 / 代理 / 内核 / 甲骨文 / 重装 / NAT
 #   SCRIPT_URL      下载地址（HTTPS）
 #   SCRIPT_MODE     bash | binary
 #   SCRIPT_ARG      固定参数（可选）
@@ -136,7 +136,7 @@ scripts_menu() {
     case $filter in
       全部) ;;
       测试) [[ ${SST_SCRIPT_CATEGORY[$name]} == "测试" ]] || continue ;;
-      工具) [[ ${SST_SCRIPT_CATEGORY[$name]} != "测试" ]] || continue ;;
+      工具) [[ ${SST_SCRIPT_CATEGORY[$name]} == "工具" ]] || continue ;;
       *) [[ ${SST_SCRIPT_CATEGORY[$name]} == "$filter" ]] || continue ;;
     esac
     names+=("$name")
