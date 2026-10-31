@@ -254,6 +254,7 @@ bash tests/scripts.sh
 bash tests/ai.sh
 bash tests/apps.sh
 bash tests/menu.sh
+bash tests/config.sh
 sudo bash tests/init_hardening.sh
 ```
 

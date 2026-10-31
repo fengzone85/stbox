@@ -15,6 +15,7 @@ cfg_get() {
 cfg_set() {
   local key=$1 value=$2 f tmp
   [[ $key =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || die "非法配置键：$key"
+  [[ $value != *$'\n'* && $value != *$'\r'* ]] || die "配置值不能包含换行符：$key"
   f=$(cfg_file)
   mkdir -p "$SST_CONFIG_DIR" 2>/dev/null || die "无法创建配置目录：$SST_CONFIG_DIR"
   tmp=$(mktemp) || die "无法创建临时文件"

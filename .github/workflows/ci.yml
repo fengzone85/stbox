@@ -26,6 +26,8 @@ jobs:
         run: bash tests/apps.sh
       - name: Menu dispatch tests
         run: bash tests/menu.sh
+      - name: Config and cron tests
+        run: bash tests/config.sh
 
   container-smoke:
     runs-on: ubuntu-latest
@@ -47,4 +49,5 @@ jobs:
             bash /src/tests/ai.sh
             bash /src/tests/apps.sh
             bash /src/tests/menu.sh
+            bash /src/tests/config.sh
           '

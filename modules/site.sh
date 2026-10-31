@@ -23,6 +23,11 @@ site_db_pass() {
   awk -F= '$1 == "MARIADB_ROOT_PASSWORD" {print $2}' "$SITE_ROOT/.env" 2>/dev/null
 }
 
+# 在容器内使用 MYSQL_PWD，避免密码出现在宿主机 argv
+site_db_exec() {
+  docker exec -i sst-db sh -c 'MYSQL_PWD="$MARIADB_ROOT_PASSWORD" exec mariadb -uroot'
+}
+
 site_valid_domain() {
   local d=$1
   [[ $d =~ ^[A-Za-z0-9][A-Za-z0-9.-]*$ ]] || die "域名格式无效：$d"
@@ -40,10 +45,10 @@ site_reload() {
 }
 
 site_db_wait() {
-  local rootpass=$1 i
+  local i
   for i in $(seq 1 30); do
     if docker exec sst-db sh -c \
-      'mariadb-admin ping -uroot -p"$MARIADB_ROOT_PASSWORD" >/dev/null 2>&1 || mysqladmin ping -uroot -p"$MARIADB_ROOT_PASSWORD" >/dev/null 2>&1'; then
+      'MYSQL_PWD="$MARIADB_ROOT_PASSWORD" mariadb -uroot -N -e "SELECT 1"' >/dev/null 2>&1; then
       return 0
     fi
     sleep 2
@@ -81,7 +86,7 @@ site_append_ssl_vhost() {
   local cert="/etc/apache2/certs/${domain}_cert.pem"
   local key="/etc/apache2/certs/${domain}_key.pem"
   [[ -f "$SITE_ROOT/certs/${domain}_cert.pem" && -f "$SITE_ROOT/certs/${domain}_key.pem" ]] || return 1
-  grep -q "ServerName $domain" "$conf" 2>/dev/null || site_write_http_vhost "$domain" "$docroot" "$target"
+  grep -Fq "ServerName $domain" "$conf" 2>/dev/null || site_write_http_vhost "$domain" "$docroot" "$target"
 
   if grep -q 'VirtualHost \*:443' "$conf" 2>/dev/null; then
     return 0
@@ -224,12 +229,15 @@ site_wordpress() {
   dbname="wp_$(printf '%s' "$domain" | sed 's/[^A-Za-z0-9]/_/g')"
   dbuser="$dbname"
   dbpass=$(openssl rand -hex 12)
-  site_db_wait "$rootpass" || die "数据库未就绪，请稍后重试"
+  site_db_wait || die "数据库未就绪，请稍后重试"
 
   info "创建数据库与用户：$dbname"
-  docker exec sst-db mariadb -uroot -p"$rootpass" -e \
-    "CREATE DATABASE IF NOT EXISTS \`$dbname\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; CREATE USER IF NOT EXISTS '$dbuser'@'%' IDENTIFIED BY '$dbpass'; GRANT ALL PRIVILEGES ON \`$dbname\`.* TO '$dbuser'@'%'; FLUSH PRIVILEGES;" \
-    || die "创建数据库失败"
+  site_db_exec <<SQL || die "创建数据库失败"
+CREATE DATABASE IF NOT EXISTS \`$dbname\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER IF NOT EXISTS '$dbuser'@'%' IDENTIFIED BY '$dbpass';
+GRANT ALL PRIVILEGES ON \`$dbname\`.* TO '$dbuser'@'%';
+FLUSH PRIVILEGES;
+SQL
 
   info "生成 wp-config.php…"
   local -A salts=()
@@ -306,11 +314,9 @@ site_remove() {
   site_reload
 
   if confirm "同时删除该站点的数据库 wp_$(printf '%s' "$domain" | sed 's/[^A-Za-z0-9]/_/g')？"; then
-    local rootpass
-    rootpass=$(site_db_pass)
-    docker exec sst-db mariadb -uroot -p"$rootpass" -e \
-      "DROP DATABASE IF EXISTS \`wp_$(printf '%s' "$domain" | sed 's/[^A-Za-z0-9]/_/g')\`;" \
-      || warn "数据库删除失败"
+    site_db_exec <<SQL || warn "数据库删除失败"
+DROP DATABASE IF EXISTS \`wp_$(printf '%s' "$domain" | sed 's/[^A-Za-z0-9]/_/g')\`;
+SQL
   fi
   ok "站点已删除：$domain"
 }
@@ -340,7 +346,7 @@ site_backup() {
   tmpd=$(mktemp -d)
 
   info "导出数据库…"
-  if ! docker exec sst-db sh -c 'mariadb-dump -uroot -p"$MARIADB_ROOT_PASSWORD" --single-transaction --all-databases' >"$tmpd/database.sql" 2>/dev/null; then
+  if ! docker exec sst-db sh -c 'MYSQL_PWD="$MARIADB_ROOT_PASSWORD" mariadb-dump -uroot --single-transaction --all-databases' >"$tmpd/database.sql" 2>/dev/null; then
     warn "数据库导出失败，继续备份文件（备份中将不含数据库）"
     rm -f "$tmpd/database.sql"
   fi

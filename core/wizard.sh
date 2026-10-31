@@ -37,6 +37,7 @@ wizard_get() {
 wizard_set() {
   local key=$1 value=$2 tmp
   [[ $key =~ ^[A-Za-z0-9_]+$ ]] || return 1
+  [[ $value != *$'\n'* && $value != *$'\r'* ]] || { warn "状态值不能包含换行符：$key"; return 1; }
   wizard_init
   tmp=$(mktemp)
   grep -vE "^${key}=" "$SST_WIZARD_STATE" >"$tmp" 2>/dev/null || true

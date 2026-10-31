@@ -181,7 +181,7 @@ system_clean() {
   fi
 
   info "清理 /tmp 过期文件…"
-  find /tmp -mindepth 1 -mtime +7 -exec rm -rf -- {} + 2>/dev/null || true
+  find /tmp -xdev -mindepth 1 -mtime +7 -exec rm -rf -- {} + 2>/dev/null || true
 
   info "清理过期日志…"
   find /var/log -type f -name '*.gz' -mtime +30 -delete 2>/dev/null || true
@@ -241,7 +241,7 @@ system_clean_deep() {
   if have journalctl; then
     journalctl --vacuum-size=50M 2>/dev/null | tail -n 1 || true
   fi
-  find /tmp -mindepth 1 -mtime +7 -exec rm -rf -- {} + 2>/dev/null || true
+  find /tmp -xdev -mindepth 1 -mtime +7 -exec rm -rf -- {} + 2>/dev/null || true
   find /var/log -type f -name '*.gz' -mtime +30 -delete 2>/dev/null || true
 
   after=$(df -m / | awk 'NR==2 {print $4}')
@@ -356,6 +356,34 @@ system_portscan() {
   nmap -Pn --top-ports "$ports" "$target"
 }
 
+cron_field_valid() {
+  local field=${1:-} part
+  [[ -n $field ]] || return 1
+  local -a parts=()
+  IFS=',' read -r -a parts <<<"$field"
+  (( ${#parts[@]} > 0 )) || return 1
+  for part in "${parts[@]}"; do
+    [[ $part =~ ^(\*|[0-9]+|[0-9]+-[0-9]+)(/[0-9]+)?$ ]] || return 1
+  done
+  return 0
+}
+
+cron_schedule_valid() {
+  local schedule=${1:-} field
+  local -a fields=()
+  read -r -a fields <<<"$schedule"
+  (( ${#fields[@]} == 5 )) || return 1
+  for field in "${fields[@]}"; do
+    cron_field_valid "$field" || return 1
+  done
+  return 0
+}
+
+# cron 会把命令中的 % 视为换行，写入前需要转义
+cron_escape_percent() {
+  printf '%s\n' "${1//%/\\%}"
+}
+
 system_cron() {
   local action=${1:-}
   if [[ -z $action ]]; then
@@ -395,17 +423,17 @@ system_cron() {
       name=$(ask "任务名称（字母数字）" "mytask")
       [[ $name =~ ^[A-Za-z0-9_-]+$ ]] || die "任务名称仅支持字母、数字、下划线和短横线"
       schedule=$(ask "执行时间（分 时 日 月 周）" "0 3 * * *")
-      local -a cron_fields=()
-      read -r -a cron_fields <<<"$schedule"
-      [[ ${#cron_fields[@]} -eq 5 ]] || die "cron 时间格式应为 5 段，如：0 3 * * *"
+      cron_schedule_valid "$schedule" || die "cron 时间格式无效，示例：0 3 * * * 或 */5 * * * *"
       cmd=$(ask "要执行的命令" "st backup create")
       [[ -n $cmd ]] || die "命令不能为空"
+      local cmd_line
+      cmd_line=$(cron_escape_percent "$cmd")
       file="/etc/cron.d/sst-$name"
       confirm "写入 $file：$schedule root $cmd ？" || return 0
       cat >"$file" <<EOF
 SHELL=/bin/bash
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-$schedule root $cmd
+$schedule root $cmd_line
 EOF
       chmod 644 "$file"
       ok "定时任务已添加：$file"
