@@ -59,6 +59,22 @@ sst_load_scripts() {
 
 script_exists() { [[ -n ${SST_SCRIPT_TITLE[${1:-}]:-} ]]; }
 
+scripts_confirm_risk() {
+  local name=$1 title=${SST_SCRIPT_TITLE[$1]:-}
+  if [[ ${SST_SCRIPT_CATEGORY[$name]:-} == "重装" ]]; then
+    [[ ${SST_YES:-0} -eq 1 ]] && return 0
+    warn "该操作会清空磁盘并重装系统，无法通过本工具回滚。"
+    local phrase
+    read -r -p "$(ui_prompt_text '输入 REINSTALL 确认')" phrase || return 1
+    if [[ $phrase != "REINSTALL" ]]; then
+      warn "确认词不匹配，已取消"
+      return 1
+    fi
+    return 0
+  fi
+  confirm "下载并执行 $title？"
+}
+
 scripts_run() {
   local name=$1
   shift
@@ -85,7 +101,7 @@ scripts_run() {
   kv "来源" "$url"
   kv "风险" "$risk"
   warn "该功能由第三方脚本提供，执行前请确认来源可信；脚本拥有当前用户权限。"
-  confirm "下载并执行 $title？" || return 0
+  scripts_confirm_risk "$name" || return 0
 
   mkdir -p "$SST_DATA_DIR/scripts" 2>/dev/null || die "无法创建脚本缓存目录"
   file="$SST_DATA_DIR/scripts/${name}-${ARCH}"

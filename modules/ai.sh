@@ -2,7 +2,7 @@
 # 模块：常用 AI 编程工具部署（Claude Code / Codex / Gemini CLI / OpenCode 等）
 
 sst_register_module ai "AI 工具" "Claude Codex Gemini OpenCode 等"
-SST_MODULE_ITEMS[ai]=$'status|已安装与可用\ninstall|选择安装\nlist|项目清单\nccswitch|CC Switch CLI\nclaude|Claude Code\ncodex|Codex CLI\ngemini|Gemini CLI\nqoder|Qoder 国际版\nqodercn|Qoder CN\ncodebuddy|CodeBuddy 国际版\ncodebuddycn|CodeBuddy 国内版\ngrok|Grok Build\nopencode|OpenCode\nopenclaw|OpenClaw\nhermes|Hermes Agent\npi|Pi Coding Agent\nminimax|MiniMax Code\nkimi|Kimi Code\nohmy|Oh My Pi\ndocs|官方地址'
+SST_MODULE_ITEMS[ai]=$'status|已安装与可用\ninstall|选择安装\nversion|版本与路径\nupdate|更新已安装\nremove|卸载工具\nlist|项目清单\nccswitch|CC Switch CLI\nclaude|Claude Code\ncodex|Codex CLI\ngemini|Gemini CLI\nqoder|Qoder 国际版\nqodercn|Qoder CN\ncodebuddy|CodeBuddy 国际版\ncodebuddycn|CodeBuddy 国内版\ngrok|Grok Build\nopencode|OpenCode\nopenclaw|OpenClaw\nhermes|Hermes Agent\npi|Pi Coding Agent\nminimax|MiniMax Code\nkimi|Kimi Code\nohmy|Oh My Pi\ndocs|官方地址'
 
 AI_IDS=(claude codex gemini qoder qodercn codebuddy codebuddycn grok opencode openclaw hermes pi minimax kimi ohmy ccswitch)
 declare -gA AI_TITLE=(
@@ -153,13 +153,19 @@ ai_install_npm() {
 }
 
 ai_install_script() {
-  local id=$1 title=${AI_TITLE[$1]} url=${AI_SOURCE[$1]} tmp rc
+  local id=$1 title=${AI_TITLE[$1]} url=${AI_SOURCE[$1]}
   require_root
   ensure_tool curl curl || return 1
   section "安装 $title"
   kv "来源" "$url"
   warn "该安装脚本来自第三方项目，执行前请确认来源可信。"
   confirm "下载并执行 $title 安装脚本？" || return 0
+  ai_run_script "$id"
+}
+
+# 执行第三方安装脚本（不含确认，供安装/更新复用）
+ai_run_script() {
+  local id=$1 title=${AI_TITLE[$1]} url=${AI_SOURCE[$1]} tmp rc
   tmp=$(mktemp) || return 1
   if ! download_with_fallback "$url" "$tmp" 120; then
     rm -f "$tmp"
@@ -185,6 +191,143 @@ ai_install_tool() {
     script) ai_install_script "$id" ;;
     *) die "暂不支持自动安装：${AI_TITLE[$id]}" ;;
   esac
+}
+
+ai_resolve_id() {
+  local key=$1 id
+  [[ -n $key ]] || return 1
+  for id in "${AI_IDS[@]}"; do
+    [[ $key == "$id" || $key == "${AI_CMD[$id]}" || $key == "${AI_TITLE[$id]}" ]] || continue
+    printf '%s\n' "$id"
+    return 0
+  done
+  return 1
+}
+
+# 选择已安装工具，结果写入 AI_PICKED
+ai_pick_installed() {
+  local title=$1 id labels=() ids=()
+  for id in "${AI_IDS[@]}"; do
+    have "${AI_CMD[$id]}" || continue
+    ids+=("$id")
+    labels+=("${AI_TITLE[$id]}（${AI_CMD[$id]}）")
+  done
+  if (( ${#ids[@]} == 0 )); then
+    info "没有检测到已安装的 AI 工具"
+    return 1
+  fi
+  ui_menu_list "$(printf '%s\n' "${labels[@]}")" "返回"
+  ui_read_choice "$title" || return 1
+  local choice=$UI_CHOICE
+  if ! [[ $choice =~ ^[0-9]+$ ]] || (( choice < 1 || choice > ${#ids[@]} )); then
+    warn "无效编号：$choice"
+    return 1
+  fi
+  AI_PICKED=${ids[$((choice - 1))]}
+}
+
+ai_version_of() {
+  local id=$1 cmd=${AI_CMD[$1]} out=''
+  if [[ ${AI_KIND[$id]} == npm ]] && have npm; then
+    out=$(npm ls -g --depth=0 "${AI_SOURCE[$id]}" 2>/dev/null | grep -F "${AI_SOURCE[$id]}@" | head -n1)
+    out=${out##*@}
+  fi
+  if [[ -z $out ]]; then
+    if have timeout; then
+      out=$(timeout 5 "$cmd" --version 2>/dev/null </dev/null | head -n1)
+    else
+      out=$("$cmd" --version 2>/dev/null </dev/null | head -n1)
+    fi
+  fi
+  printf '%s\n' "${out:-未知}"
+}
+
+ai_version() {
+  local id state ver path
+  section "AI 工具版本"
+  printf '  %-18s %-10s %-18s %s\n' "工具" "状态" "版本" "命令"
+  hr
+  for id in "${AI_IDS[@]}"; do
+    if have "${AI_CMD[$id]}"; then
+      state="已安装"
+      path=$(command -v "${AI_CMD[$id]}")
+      ver=$(ai_version_of "$id")
+    else
+      state="未安装"
+      path=${AI_DOC[$id]}
+      ver="-"
+    fi
+    printf '  %-18s %-10s %-18s %s\n' "${AI_TITLE[$id]}" "$state" "$ver" "$path"
+  done
+}
+
+ai_update_tool() {
+  local id=$1 title=${AI_TITLE[$1]}
+  have "${AI_CMD[$id]}" || { warn "$title 未安装，请先安装：st ai $id"; return 1; }
+  case ${AI_KIND[$id]} in
+    npm)
+      require_root
+      ai_require_node || return 1
+      confirm "更新 $title 到最新版本？" || return 0
+      if npm install -g "${AI_SOURCE[$id]}@latest"; then
+        ok "$title 已更新：$(ai_version_of "$id")"
+      else
+        warn "$title 更新失败，请检查 npm 源或网络"
+        return 1
+      fi
+      ;;
+    script)
+      confirm "重新执行 $title 安装脚本以更新？" || return 0
+      ai_run_script "$id"
+      ;;
+  esac
+}
+
+ai_update() {
+  local id=${1:-}
+  if [[ -z $id ]]; then
+    ai_pick_installed "选择要更新的工具" || return 0
+    id=$AI_PICKED
+  else
+    id=$(ai_resolve_id "$id") || die "未知 AI 工具：$1"
+  fi
+  ai_update_tool "$id"
+}
+
+ai_remove_tool() {
+  local id=$1 title=${AI_TITLE[$1]}
+  if ! have "${AI_CMD[$id]}"; then
+    info "$title 未安装"
+    return 0
+  fi
+  case ${AI_KIND[$id]} in
+    npm)
+      require_root
+      [[ $id == codebuddy || $id == codebuddycn ]] && warn "CodeBuddy 国际版/国内版共用同一命令，卸载后两者均不可用"
+      confirm "卸载 $title（npm uninstall -g ${AI_SOURCE[$id]}）？" || return 0
+      if npm uninstall -g "${AI_SOURCE[$id]}"; then
+        ok "$title 已卸载"
+      else
+        warn "$title 卸载失败"
+        return 1
+      fi
+      ;;
+    script)
+      warn "$title 由第三方安装脚本管理，本工具不自动卸载"
+      info "手动卸载方式参考：${AI_DOC[$id]}"
+      ;;
+  esac
+}
+
+ai_remove() {
+  local id=${1:-}
+  if [[ -z $id ]]; then
+    ai_pick_installed "选择要卸载的工具" || return 0
+    id=$AI_PICKED
+  else
+    id=$(ai_resolve_id "$id") || die "未知 AI 工具：$1"
+  fi
+  ai_remove_tool "$id"
 }
 
 ai_status() {

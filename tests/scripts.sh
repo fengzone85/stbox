@@ -28,6 +28,15 @@ declare -a FAILED=()
 pass() { PASS=$((PASS + 1)); printf '  [PASS] %s\n' "$*"; }
 fail() { FAIL=$((FAIL + 1)); FAILED+=("$*"); printf '  [FAIL] %s\n' "$*" >&2; }
 
+check_eq() {
+  local label=$1 expected=$2 actual=${3:-}
+  if [[ $actual == "$expected" ]]; then
+    pass "$label（$actual）"
+  else
+    fail "$label 期望 $expected，实际 ${actual:-空}"
+  fi
+}
+
 sst_load_scripts
 
 section "脚本清单数量"
@@ -65,6 +74,20 @@ for name in nodebench tcpquality autotrace nodequality ipcheck taier hardware-in
     fail "缺少脚本：$name"
   fi
 done
+
+section "DD 重装二次确认"
+SST_YES=0
+printf 'wrong\n' | scripts_confirm_risk reinstall-bin456789 >/dev/null 2>&1
+rc=$?
+check_eq "错误确认词取消" 1 "$rc"
+printf 'REINSTALL\n' | scripts_confirm_risk reinstall-bin456789 >/dev/null 2>&1
+rc=$?
+check_eq "正确确认词通过" 0 "$rc"
+SST_YES=1
+scripts_confirm_risk reinstall-bin456789 </dev/null >/dev/null 2>&1
+rc=$?
+check_eq "--yes 跳过确认词" 0 "$rc"
+SST_YES=0
 
 section "测试结果"
 kv "通过" "$PASS"

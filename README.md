@@ -252,6 +252,7 @@ bash -n st.sh install.sh core/*.sh modules/*.sh apps/*/app.sh scripts/*.conf
 bash tests/ui.sh
 bash tests/scripts.sh
 bash tests/ai.sh
+bash tests/apps.sh
 sudo bash tests/init_hardening.sh
 ```
 

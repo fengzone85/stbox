@@ -22,8 +22,9 @@ services:
     volumes:
       - ./config:/config
 YAML
-  ok "code-server 已启动：https://$(get_public_ip):8443"
+  ok "code-server 已启动：http://$(get_public_ip):8443"
   info "访问密码：$pass"
+  app_webide_notice 8443
 }
 
 app_code_server_remove() {

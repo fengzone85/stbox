@@ -193,12 +193,14 @@ Compose 助手（`core/apps.sh`）：
 | `app_compose_ps <name>` | 查看项目容器状态 |
 | `app_data_dir <name>` | 返回应用数据目录 |
 | `app_installed <name>` | 是否存在 Compose 文件（菜单“已部署”标记） |
+| `app_webide_notice <端口>` | Web IDE 安全提示（HTTPS/反代/SSH 隧道） |
 
 约定：
 
 - 应用安装前调用 `docker_require`，未安装 Docker 时给出安装入口。
 - 数据统一落在命名卷或 `data/apps/<name>/`，移除容器不删数据。
 - 端口固定写在 Compose 中并在 `app.conf` 声明；冲突由用户确认。
+- Web IDE 类应用安装后提示 HTTP 暴露风险，建议 SSH 隧道或 HTTPS 反向代理。
 
 ---
 
@@ -280,7 +282,8 @@ st docker   status | install | ps | logs [容器] | restart|start|stop|exec [容
             images | networks | volumes | prune | compose | uninstall
 st apps     list | menu | install <名称> | remove <名称> | status <名称>
 st site     install | status | add | wordpress | proxy | ssl | list | remove | backup | update | uninstall
-st ai       status | list | install | claude | codex | gemini | qoder | codebuddy | opencode | ccswitch
+st ai       status | list | install | version | update [工具] | remove [工具]
+            快捷安装：claude | codex | gemini | qoder | codebuddy | opencode | ccswitch
 st tools    disk_mount | git | rclone | fclone | scripts | probes | panels | nodes | proxy | kernel
             warp | bbr3 | oracle | reinstall | nat | <脚本名>
 st components list | install | install_all | remove | custom

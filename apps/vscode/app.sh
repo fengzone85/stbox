@@ -24,6 +24,8 @@ YAML
   ok "VS Code Docker 已启动"
   info "访问地址：http://$(get_public_ip):8444/?tkn=$token"
   info "连接 Token：$token"
+  app_webide_notice 8444
+  warn "Token 会出现在访问 URL 与终端输出中，请勿保存到公开日志或截图。"
 }
 
 app_vscode_remove() {

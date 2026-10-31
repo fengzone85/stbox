@@ -97,3 +97,11 @@ app_access_url() {
   [[ -n $url ]] || return 0
   printf '%s\n' "${url//IP/$(get_public_ip)}"
 }
+
+# Web IDE 类应用的安全提示（code-server / OpenVSCode 等）
+app_webide_notice() {
+  local port=$1
+  warn "Web IDE 以 HTTP 暴露 $port 端口，直接对公网开放存在被接管风险。"
+  info "建议用 SSH 隧道访问：ssh -L $port:127.0.0.1:$port 用户@服务器"
+  info "如需公网访问，请通过 Nginx/Caddy 反向代理并启用 HTTPS 与访问认证。"
+}

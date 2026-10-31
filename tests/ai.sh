@@ -16,11 +16,23 @@ source "$SST_HOME/core/menu.sh"
 # shellcheck source=../modules/ai.sh
 source "$SST_HOME/modules/ai.sh"
 
+WORK_DIR=$(mktemp -d /tmp/stbox-ai-test.XXXXXX)
+trap 'rm -rf "$WORK_DIR"' EXIT
+
 PASS=0
 FAIL=0
 
 pass() { PASS=$((PASS + 1)); printf '  [PASS] %s\n' "$*"; }
 fail() { FAIL=$((FAIL + 1)); printf '  [FAIL] %s\n' "$*" >&2; }
+
+check_eq() {
+  local label=$1 expected=$2 actual=${3:-}
+  if [[ $actual == "$expected" ]]; then
+    pass "$label（$actual）"
+  else
+    fail "$label 期望 $expected，实际 ${actual:-空}"
+  fi
+}
 
 check_contains() {
   local label=$1 haystack=$2 needle=$3
@@ -65,6 +77,46 @@ check_contains "状态表包含 CC Switch CLI" "$out" "CC Switch CLI"
 out=$(ai_docs)
 check_contains "文档包含 Claude Code" "$out" "docs.claude.com"
 check_contains "文档包含 CC Switch CLI" "$out" "SaladDay/cc-switch-cli"
+
+section "AI 生命周期"
+check_contains "菜单含版本" "${SST_MODULE_ITEMS[ai]}" "version|版本与路径"
+check_contains "菜单含更新" "${SST_MODULE_ITEMS[ai]}" "update|更新已安装"
+check_contains "菜单含卸载" "${SST_MODULE_ITEMS[ai]}" "remove|卸载工具"
+
+check_eq "按 ID 解析工具" claude "$(ai_resolve_id claude)"
+check_eq "按标题解析工具" codex "$(ai_resolve_id 'Codex CLI')"
+if ai_resolve_id bogus >/dev/null 2>&1; then
+  fail "未知工具应解析失败"
+else
+  pass "未知工具解析失败"
+fi
+
+mkdir -p "$WORK_DIR/bin"
+cat >"$WORK_DIR/bin/fakeai" <<'EOF'
+#!/usr/bin/env bash
+printf '9.9.9\n'
+EOF
+chmod +x "$WORK_DIR/bin/fakeai"
+
+old_cmd=${AI_CMD[claude]}
+old_kind=${AI_KIND[claude]}
+AI_CMD[claude]=fakeai
+AI_KIND[claude]=script
+check_eq "读取命令版本" 9.9.9 "$(PATH="$WORK_DIR/bin:$PATH" ai_version_of claude)"
+
+AI_CMD[claude]=__sst_missing_ai_cmd__
+out=$(ai_update_tool claude 2>&1)
+rc=$?
+check_eq "未安装工具更新返回非零" 1 "$rc"
+check_contains "更新提示未安装" "$out" "未安装"
+
+out=$(ai_remove_tool claude 2>&1)
+rc=$?
+check_eq "未安装工具卸载返回零" 0 "$rc"
+check_contains "卸载提示未安装" "$out" "未安装"
+
+AI_CMD[claude]=$old_cmd
+AI_KIND[claude]=$old_kind
 
 section "测试结果"
 kv "通过" "$PASS"
