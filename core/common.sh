@@ -1,13 +1,10 @@
 #!/usr/bin/env bash
-# 基础层：颜色、日志、权限、系统探测、包管理、交互工具
+# 基础层：日志、权限、系统探测、包管理、交互工具（界面能力见 ui.sh）
 # 由 st.sh 加载，不独立执行。
 
-if [[ ${SST_NO_COLOR:-0} -eq 1 || ! -t 1 || ${TERM:-} == "dumb" ]]; then
-  C_RESET='' C_BOLD='' C_DIM='' C_RED='' C_GREEN='' C_YELLOW='' C_BLUE='' C_CYAN='' C_MAGENTA=''
-else
-  C_RESET=$'\033[0m' C_BOLD=$'\033[1m' C_DIM=$'\033[2m'
-  C_RED=$'\033[31m' C_GREEN=$'\033[32m' C_YELLOW=$'\033[33m'
-  C_BLUE=$'\033[34m' C_CYAN=$'\033[36m' C_MAGENTA=$'\033[35m'
+if ! declare -F ui_init >/dev/null 2>&1; then
+  # shellcheck source=ui.sh
+  source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)/ui.sh"
 fi
 
 SST_CONFIG_DIR="$SST_HOME/config"
@@ -26,15 +23,15 @@ sst_log() {
   shift
   printf '%s [%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$level" "$*" >>"$SST_LOG" 2>/dev/null || true
 }
-info() { printf '%s %s\n' "${C_CYAN}[信息]${C_RESET}" "$*"; sst_log INFO "$*"; }
-ok()   { printf '%s %s\n' "${C_GREEN}[完成]${C_RESET}" "$*"; sst_log OK "$*"; }
-warn() { printf '%s %s\n' "${C_YELLOW}[注意]${C_RESET}" "$*" >&2; sst_log WARN "$*"; }
-err()  { printf '%s %s\n' "${C_RED}[错误]${C_RESET}" "$*" >&2; sst_log ERROR "$*"; }
+info() { ui_status info "$*"; sst_log INFO "$*"; }
+ok()   { ui_status ok "$*"; sst_log OK "$*"; }
+warn() { ui_status warn "$*" >&2; sst_log WARN "$*"; }
+err()  { ui_status err "$*" >&2; sst_log ERROR "$*"; }
 die()  { err "$*"; exit 1; }
 
-section() { printf '\n%s%s%s\n' "$C_BOLD$C_BLUE" "$*" "$C_RESET"; }
-kv()      { printf '  %-14s %s\n' "$1" "$2"; }
-hr()      { printf '%s\n' "${C_DIM}────────────────────────────────────────────────────────${C_RESET}"; }
+section() { ui_section "${1:-}" "${2:-}"; }
+kv()      { ui_kv "${1:-}" "${2:-}"; }
+hr()      { ui_rule; }
 
 # ---------- 通用工具 ----------
 have() { command -v "$1" >/dev/null 2>&1; }
@@ -81,7 +78,9 @@ require_root() {
   [[ ${EUID:-1} -eq 0 ]] && return 0
   if have sudo && [[ -t 0 ]]; then
     warn "该操作需要 root 权限，正在使用 sudo 重新执行…"
-    exec sudo -E env SST_YES="$SST_YES" SST_NO_COLOR="$SST_NO_COLOR" bash "$SST_ENTRY" "${SST_ARGS[@]}"
+    exec sudo -E env SST_YES="$SST_YES" SST_NO_COLOR="$SST_NO_COLOR" \
+      SST_UI_ASCII="${SST_UI_ASCII:-0}" SST_PLAIN="${SST_PLAIN:-0}" \
+      bash "$SST_ENTRY" "${SST_ARGS[@]}"
   fi
   die "需要 root 权限，请使用 sudo $SST_ENTRY ${SST_ARGS[*]:-}"
 }

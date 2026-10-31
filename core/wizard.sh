@@ -69,11 +69,75 @@ wizard_step_label() {
   esac
 }
 
+wizard_step_short() {
+  case $1 in
+    preflight) printf '预检' ;;
+    disk) printf '磁盘' ;;
+    basics) printf '基础' ;;
+    accounts) printf '账户' ;;
+    ssh) printf 'SSH' ;;
+    firewall) printf '防火墙' ;;
+    hardening) printf '加固' ;;
+    report) printf '报告' ;;
+    *) printf '%s' "$1" ;;
+  esac
+}
+
+wizard_step_state_text() {
+  case $1 in
+    done) printf '已完成' ;;
+    skipped) printf '已跳过' ;;
+    in_progress) printf '进行中' ;;
+    *) printf '待执行' ;;
+  esac
+}
+
+wizard_done_count() {
+  local s count=0
+  for s in "${SST_WIZARD_STEPS[@]}"; do
+    [[ $(wizard_step_status "$s") == done ]] && count=$((count + 1))
+  done
+  printf '%d' "$count"
+}
+
+wizard_next_step() {
+  local s status
+  for s in "${SST_WIZARD_STEPS[@]}"; do
+    status=$(wizard_step_status "$s")
+    [[ $status == done || $status == skipped ]] && continue
+    printf '%s' "$s"
+    return 0
+  done
+}
+
+wizard_progress_meta() {
+  local total done next
+  total=${#SST_WIZARD_STEPS[@]}
+  done=$(wizard_done_count)
+  next=$(wizard_next_step)
+  if (( done >= total )); then
+    printf '全部完成 · 可生成报告'
+  elif [[ -n $next ]]; then
+    printf '%d/%d 完成 · 下一步：%s' "$done" "$total" "$(wizard_step_label "$next")"
+  else
+    printf '%d/%d 完成 · 可生成报告' "$done" "$total"
+  fi
+}
+
 wizard_status_table() {
-  local s
+  local s status symbol color text
   section "开荒进度"
   for s in "${SST_WIZARD_STEPS[@]}"; do
-    printf '  %-18s %s\n' "$(wizard_step_label "$s")" "$(wizard_step_status "$s")"
+    status=$(wizard_step_status "$s")
+    case $status in
+      done) symbol=$UI_SYM_OK color=$C_OK ;;
+      skipped) symbol=$UI_SYM_WARN color=$C_WARN ;;
+      in_progress) symbol=$UI_SYM_ARROW color=$C_ACCENT ;;
+      *) symbol=$UI_SYM_BULLET color=$C_DIM ;;
+    esac
+    text=$(wizard_step_state_text "$status")
+    printf '  %s%s%s %s%s%s\n' "$color" "$symbol" "$C_RESET" \
+      "$(ui_pad "$(wizard_step_label "$s")" 18)" "$C_DIM" "$text$C_RESET"
   done
   [[ -n $(wizard_get HOSTNAME) ]] && kv "主机名" "$(wizard_get HOSTNAME)"
   [[ -n $(wizard_get TIMEZONE) ]] && kv "时区" "$(wizard_get TIMEZONE)"
@@ -86,6 +150,7 @@ wizard_status_table() {
   [[ -n $(wizard_get SECURITY_SYSCTL) ]] && kv "安全参数" "$(wizard_get SECURITY_SYSCTL)"
   [[ -n $(wizard_get SWAP) ]] && kv "SWAP" "$(wizard_get SWAP)"
   [[ -n $(wizard_get BBR) ]] && kv "BBR" "$(wizard_get BBR)"
+  return 0
 }
 
 wizard_report_write() {

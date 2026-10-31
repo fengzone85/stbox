@@ -151,7 +151,7 @@ security_status() {
 
   section "内核与防护"
   kv "TCP 算法" "$(sysctl -n net.ipv4.tcp_congestion_control 2>/dev/null || echo 未知)"
-  kv "BBR" "$(bbr_available && echo 可用 || echo 不可用)"
+  kv "BBR" "$(bbr_supported && echo 可用 || echo 不可用)"
   kv "Fail2ban" "$(have fail2ban-client && svc_state_text fail2ban || echo 未安装)"
 }
 
@@ -159,11 +159,26 @@ bbr_available() {
   sysctl -n net.ipv4.tcp_available_congestion_control 2>/dev/null | grep -qw bbr
 }
 
+bbr_supported() {
+  bbr_available && return 0
+  if have modinfo && modinfo tcp_bbr >/dev/null 2>&1; then
+    return 0
+  fi
+  compgen -G "/lib/modules/$(uname -r)/kernel/net/ipv4/tcp_bbr.ko*" >/dev/null 2>&1
+}
+
+bbr_try_load() {
+  bbr_available && return 0
+  have modprobe || return 1
+  modprobe tcp_bbr >/dev/null 2>&1 || return 1
+  bbr_available
+}
+
 security_bbr_status() {
   section "BBR 状态"
   kv "当前算法" "$(sysctl -n net.ipv4.tcp_congestion_control 2>/dev/null || echo 未知)"
   kv "队列规则" "$(sysctl -n net.core.default_qdisc 2>/dev/null || echo 未知)"
-  kv "内核支持" "$(bbr_available && echo 是 || echo 否)"
+  kv "内核支持" "$(bbr_supported && echo 是 || echo 否)"
   if [[ -f /etc/sysctl.d/99-sst-bbr.conf ]]; then
     kv "配置文件" "/etc/sysctl.d/99-sst-bbr.conf"
   fi
@@ -171,11 +186,15 @@ security_bbr_status() {
 
 security_bbr_on() {
   require_root
-  if ! bbr_available; then
+  if ! bbr_supported; then
     warn "当前内核不支持 BBR（通常需要 4.9+ 内核），请先升级内核"
     return 1
   fi
   confirm "启用 BBR（fq 队列 + bbr 拥塞控制）？" || return 0
+  if ! bbr_try_load; then
+    warn "tcp_bbr 模块加载失败，请检查内核模块"
+    return 1
+  fi
   cat >/etc/sysctl.d/99-sst-bbr.conf <<'EOF'
 net.core.default_qdisc=fq
 net.ipv4.tcp_congestion_control=bbr
@@ -280,7 +299,9 @@ security_firewall_disable() {
   require_root
   local fw
   fw=$(_fw_installed)
-  confirm "关闭防火墙会使所有端口直接暴露，确认关闭？" || return 0
+  ui_confirm_danger "将关闭防火墙，所有端口会直接暴露。" \
+    "公网服务、Docker 端口与 SSH" \
+    "st security firewall_enable" || return 0
   case $fw in
     ufw) ufw --force disable; ok "UFW 已关闭" ;;
     firewalld) systemctl disable --now firewalld 2>/dev/null || true; ok "firewalld 已关闭" ;;
@@ -353,7 +374,9 @@ security_ssh_password() {
   if (( keys == 0 )); then
     die "未发现非空的 authorized_keys，禁用密码登录会导致无法登录，已中止"
   fi
-  confirm "禁用密码登录？请保持当前会话，并先用密钥登录验证" || return 0
+  ui_confirm_danger "将禁用 SSH 密码登录。" \
+    "未配置密钥的账户将无法登录" \
+    "st security ssh_password_on" || return 0
   ssh_set_option PasswordAuthentication no
   svc_restart "$(ssh_service_name)" || { err "重启 SSH 失败，请检查配置备份"; return 1; }
   ok "已禁用密码登录，请新开终端验证密钥登录后再关闭当前会话"
@@ -362,7 +385,9 @@ security_ssh_password() {
 security_ssh_password_on() {
   require_root
   warn "开启 root 密码登录会降低 SSH 安全性，请确保密码强度并配合 Fail2ban/防火墙"
-  confirm "同时开启 PasswordAuthentication 与 PermitRootLogin yes？" || return 0
+  ui_confirm_danger "将开启密码登录和 root 密码登录。" \
+    "SSH 暴力破解与弱密码风险" \
+    "st security ssh_password" || return 0
   ssh_set_option PasswordAuthentication yes
   ssh_set_option PermitRootLogin yes
   svc_restart "$(ssh_service_name)" || { err "重启 SSH 失败，请检查配置备份"; return 1; }

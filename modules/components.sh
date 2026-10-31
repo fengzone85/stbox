@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # 模块：常用组件、语言环境与 tmux 工作区
 
-sst_register_module components "组件环境" "常用工具 语言环境 工作区"
+sst_register_module components "组件环境" "常用工具 语言环境 Ansible"
 SST_MODULE_ITEMS[components]=$'list|组件清单\ninstall|安装组件\ninstall_all|安装全部组件\nremove|卸载组件\ncustom|安装自定义包\npython|Python 环境\nnodejs|Node.js 环境\ngolang|Go 环境\njava|Java 环境\nuninstall_env|卸载语言环境\nworkspace|tmux 工作区'
 
-COMP_KEYS=(curl wget sudo socat htop iftop unzip tar tmux ffmpeg btop ranger gdu fzf screen masscan cmatrix sl bastet nsnake ninvaders)
-COMP_PKGS=(curl wget sudo socat htop iftop unzip tar tmux ffmpeg btop ranger gdu fzf screen masscan cmatrix sl bastet nsnake ninvaders)
-COMP_DESCS=("HTTP 下载工具" "下载工具" "权限管理" "网络通信/证书辅助" "进程监控" "网络流量监控" "ZIP 解压" "GZ 压缩解压" "终端复用" "视频编码/推流" "现代监控工具" "终端文件管理器" "磁盘占用分析" "全局模糊搜索" "后台会话" "端口扫描" "黑客帝国屏保" "跑火车屏保" "俄罗斯方块" "贪吃蛇" "太空入侵者")
+COMP_KEYS=(curl wget sudo socat htop iftop unzip tar tmux ffmpeg btop ranger gdu fzf screen masscan cmatrix sl bastet nsnake ninvaders ansible)
+COMP_PKGS=(curl wget sudo socat htop iftop unzip tar tmux ffmpeg btop ranger gdu fzf screen masscan cmatrix sl bastet nsnake ninvaders ansible)
+COMP_DESCS=("HTTP 下载工具" "下载工具" "权限管理" "网络通信/证书辅助" "进程监控" "网络流量监控" "ZIP 解压" "GZ 压缩解压" "终端复用" "视频编码/推流" "现代监控工具" "终端文件管理器" "磁盘占用分析" "全局模糊搜索" "后台会话" "端口扫描" "黑客帝国屏保" "跑火车屏保" "俄罗斯方块" "贪吃蛇" "太空入侵者" "自动化运维")
 
 comp_installed() {
   have "$1" || [[ -x "/usr/games/$1" ]]
@@ -173,10 +173,10 @@ components_java() { components_env_install java "OpenJDK 17"; }
 components_uninstall_env() {
   require_root
   section "卸载语言环境"
-  printf '  %s1%s) Python3\n  %s2%s) Node.js\n  %s3%s) Golang\n  %s4%s) OpenJDK 17\n  %s0%s) 返回\n\n' \
-    "$C_GREEN" "$C_RESET" "$C_GREEN" "$C_RESET" "$C_GREEN" "$C_RESET" "$C_GREEN" "$C_RESET" "$C_GREEN" "$C_RESET"
   local choice lang label
-  read -r -p "请选择: " choice || return 0
+  ui_menu_list $'Python3\nNode.js\nGolang\nOpenJDK 17'
+  ui_read_choice || return 0
+  choice=$UI_CHOICE
   case $choice in
     1) lang=python label=Python3 ;;
     2) lang=node label="Node.js" ;;
@@ -211,10 +211,12 @@ components_workspace() {
       warn "tmux 未安装"
     fi
     printf '\n'
-    printf '  %s1-5%s) 进入对应工作区（不存在则创建）\n' "$C_GREEN" "$C_RESET"
-    printf '  %sa%s) 安装 tmux\n  %sb%s) 卸载 tmux\n  %s0%s) 返回\n\n' \
-      "$C_GREEN" "$C_RESET" "$C_GREEN" "$C_RESET" "$C_GREEN" "$C_RESET"
-    read -r -p "请选择: " choice || break
+    ui_menu_option "1-5" "进入对应工作区（不存在则创建）"
+    ui_menu_option "a" "安装 tmux"
+    ui_menu_option "b" "卸载 tmux"
+    ui_menu_footer
+    ui_read_choice || break
+    choice=$UI_CHOICE
     case $choice in
       [1-5])
         if ! have tmux; then

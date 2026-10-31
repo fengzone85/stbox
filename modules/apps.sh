@@ -95,11 +95,9 @@ app_manage() {
     kv "访问" "$(app_access_url "$name")"
     kv "状态" "$(app_status_mark "$name")"
     printf '\n'
-    printf '  %s1%s) 安装 / 重新部署\n' "$C_GREEN" "$C_RESET"
-    printf '  %s2%s) 停止并移除容器\n' "$C_GREEN" "$C_RESET"
-    printf '  %s3%s) 查看运行状态\n' "$C_GREEN" "$C_RESET"
-    printf '  %s0%s) 返回\n\n' "$C_GREEN" "$C_RESET"
-    read -r -p "请选择: " choice || break
+    ui_menu_list $'安装 / 重新部署\n停止并移除容器\n查看运行状态'
+    ui_read_choice || break
+    choice=$UI_CHOICE
     case $choice in
       1) apps_install "$name"; pause ;;
       2) apps_remove "$name"; pause ;;
@@ -123,13 +121,12 @@ apps_menu() {
     for idx in "${!names[@]}"; do
       name=${names[$idx]}
       title=${SST_APP_TITLE[$name]}
-      printf '  %s%2d%s) %-14s %-10s %-8s %s\n' \
-        "$C_GREEN" "$((idx + 1))" "$C_RESET" \
-        "$title" "${SST_APP_CATEGORY[$name]}" \
-        "$(app_status_mark "$name")" "${SST_APP_DESC[$name]}"
+      ui_menu_item "$((idx + 1))" "$title" \
+        "${SST_APP_CATEGORY[$name]} · $(app_status_mark "$name") · ${SST_APP_DESC[$name]}"
     done
-    printf '  %s 0%s) 返回\n\n' "$C_GREEN" "$C_RESET"
-    read -r -p "请选择应用: " choice || break
+    ui_menu_footer
+    ui_read_choice "请选择应用" || break
+    choice=$UI_CHOICE
     case $choice in
       0|q|back) break ;;
       [0-9]|[0-9][0-9])

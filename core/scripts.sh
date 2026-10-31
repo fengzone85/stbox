@@ -129,7 +129,7 @@ scripts_run() {
 }
 
 scripts_menu() {
-  local filter=${1:-全部} choice idx name
+  local filter=${1:-全部} choice idx name meta title
   local -a names=()
 
   for name in "${SST_SCRIPT_ORDER[@]}"; do
@@ -151,12 +151,14 @@ scripts_menu() {
     section "脚本市场（${filter}）"
     for idx in "${!names[@]}"; do
       name=${names[$idx]}
-      printf '  %s%2d%s) %-18s %-6s %s\n' \
-        "$C_GREEN" "$((idx + 1))" "$C_RESET" \
-        "${SST_SCRIPT_TITLE[$name]}" "${SST_SCRIPT_RISK[$name]}" "${SST_SCRIPT_DESC[$name]}"
+      title=${SST_SCRIPT_TITLE[$name]}
+      meta=${SST_SCRIPT_RISK[$name]}
+      [[ -n $meta ]] && meta="$meta · "
+      ui_menu_item "$((idx + 1))" "$title" "${meta}${SST_SCRIPT_DESC[$name]}"
     done
-    printf '  %s 0%s) 返回\n\n' "$C_GREEN" "$C_RESET"
-    read -r -p "请选择脚本: " choice || break
+    ui_menu_footer
+    ui_read_choice "请选择脚本" || break
+    choice=$UI_CHOICE
     case $choice in
       0|q|back) break ;;
       [0-9]|[0-9][0-9])

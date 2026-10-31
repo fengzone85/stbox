@@ -9,6 +9,19 @@ TUNE_SYSCTL_FILE=/etc/sysctl.d/99-sst-tune.conf
 TUNE_LIMIT_FILE=/etc/security/limits.d/99-sst.conf
 TUNE_SWAP_FILE=/swapfile
 
+swap_rootfs_guard() {
+  local rootfs
+  rootfs=$(findmnt -n -o FSTYPE / 2>/dev/null || stat -f -c %T / 2>/dev/null)
+  case $rootfs in
+    btrfs)
+      die "根分区为 btrfs：请优先使用独立 SWAP 分区；如使用 SWAP 文件，请先 chattr +C 关闭 CoW，再 mkswap/swapon，本向导不自动处理"
+      ;;
+    zfs)
+      die "根分区为 ZFS：请创建 swap zvol（例如 zfs create -V 2G -o compression=off -o logbias=throughput rpool/swap），再 mkswap/swapon，本向导不自动处理"
+      ;;
+  esac
+}
+
 tune_status() {
   local swap_state='未启用' apt_hosts bbr
   if have swapon; then
@@ -48,11 +61,10 @@ tune_sysctl() {
   local action=${1:-}
   if [[ -z $action ]]; then
     tune_sysctl_status
-    printf '  %s1%s) 应用网络优化\n' "$C_GREEN" "$C_RESET"
-    printf '  %s2%s) 还原优化配置\n' "$C_GREEN" "$C_RESET"
-    printf '  %s0%s) 返回\n\n' "$C_GREEN" "$C_RESET"
     local choice
-    read -r -p "请选择: " choice || return 0
+    ui_menu_list $'应用网络优化\n还原优化配置'
+    ui_read_choice || return 0
+    choice=$UI_CHOICE
     case $choice in
       1) action=on ;;
       2) action=off ;;
@@ -154,11 +166,10 @@ tune_swap() {
   local action=${1:-}
   if [[ -z $action ]]; then
     tune_swap_status
-    printf '  %s1%s) 创建/调整 SWAP\n' "$C_GREEN" "$C_RESET"
-    printf '  %s2%s) 移除 SWAP\n' "$C_GREEN" "$C_RESET"
-    printf '  %s0%s) 返回\n\n' "$C_GREEN" "$C_RESET"
     local choice
-    read -r -p "请选择: " choice || return 0
+    ui_menu_list $'创建/调整 SWAP\n移除 SWAP'
+    ui_read_choice || return 0
+    choice=$UI_CHOICE
     case $choice in
       1) action=create ;;
       2) action=remove ;;
@@ -189,6 +200,7 @@ tune_swap_status() {
 tune_swap_create() {
   require_root
   local size num unit mb avail_mb swappiness
+  swap_rootfs_guard
   size=$(ask "SWAP 大小（如 1G、512M）" "1G")
   [[ $size =~ ^([0-9]+)([GgMm])$ ]] || die "大小格式错误，示例：1G / 512M"
   num=${BASH_REMATCH[1]}
@@ -267,11 +279,10 @@ tune_ipv6() {
   local action=${1:-}
   if [[ -z $action ]]; then
     tune_ipv6_status
-    printf '  %s1%s) 优先 IPv4\n' "$C_GREEN" "$C_RESET"
-    printf '  %s2%s) 优先 IPv6（恢复默认）\n' "$C_GREEN" "$C_RESET"
-    printf '  %s0%s) 返回\n\n' "$C_GREEN" "$C_RESET"
     local choice
-    read -r -p "请选择: " choice || return 0
+    ui_menu_list $'优先 IPv4\n优先 IPv6（恢复默认）'
+    ui_read_choice || return 0
+    choice=$UI_CHOICE
     case $choice in
       1) action=4 ;;
       2) action=6 ;;
@@ -330,14 +341,10 @@ tune_mirror() {
   local target=${1:-}
   if [[ -z $target ]]; then
     tune_mirror_status
-    printf '  %s1%s) 阿里云镜像\n' "$C_GREEN" "$C_RESET"
-    printf '  %s2%s) 清华 TUNA\n' "$C_GREEN" "$C_RESET"
-    printf '  %s3%s) 中科大 USTC\n' "$C_GREEN" "$C_RESET"
-    printf '  %s4%s) 网易 163\n' "$C_GREEN" "$C_RESET"
-    printf '  %s5%s) 恢复备份\n' "$C_GREEN" "$C_RESET"
-    printf '  %s0%s) 返回\n\n' "$C_GREEN" "$C_RESET"
     local choice
-    read -r -p "请选择: " choice || return 0
+    ui_menu_list $'阿里云镜像\n清华 TUNA\n中科大 USTC\n网易 163\n恢复备份'
+    ui_read_choice || return 0
+    choice=$UI_CHOICE
     case $choice in
       1) target=aliyun ;;
       2) target=tuna ;;

@@ -14,6 +14,8 @@ SST_ENTRY="$SST_HOME/st.sh"
 export SST_HOME SST_ENTRY
 export SST_YES=${SST_YES:-0}
 export SST_NO_COLOR=${SST_NO_COLOR:-0}
+export SST_PLAIN=${SST_PLAIN:-0}
+export SST_UI_ASCII=${SST_UI_ASCII:-0}
 
 # 先消费全局开关，再加载核心（颜色等依赖这些变量）
 args=()
@@ -21,11 +23,19 @@ for arg in "$@"; do
   case $arg in
     --yes|-y) SST_YES=1 ;;
     --no-color) SST_NO_COLOR=1 ;;
+    --plain)
+      SST_PLAIN=1
+      SST_NO_COLOR=1
+      SST_UI_ASCII=1
+      ;;
     *) args+=("$arg") ;;
   esac
 done
+export SST_PLAIN SST_UI_ASCII
 set -- "${args[@]}"
 
+# shellcheck source=core/ui.sh
+source "$SST_HOME/core/ui.sh"
 # shellcheck source=core/common.sh
 source "$SST_HOME/core/common.sh"
 # shellcheck source=core/config.sh

@@ -6,7 +6,7 @@ SST_MODULE_ITEMS[init]=$'wizard|开始/继续开荒\npreflight|服务器预检\n
 
 init_status() {
   require_root
-  wizard_init
+  # 只读查看：状态文件不存在时按 0/8 显示，不创建向导状态
   wizard_status_table
   if [[ $(wizard_step_status preflight) == pending ]]; then
     info "运行 st init 开始，或 st init preflight 单独执行预检"
@@ -226,11 +226,10 @@ init_disk() {
   init_disk_scan
   local choice
   while true; do
-    printf '\n  1) 挂载已有文件系统（不格式化，推荐）\n'
-    printf '  2) 查看设备详情 / SMART\n'
-    printf '  3) 扫描完成，跳过挂载\n'
-    printf '  0) 保存并退出\n\n'
-    read -r -p "请选择: " choice || return 0
+    printf '\n'
+    ui_menu_list $'挂载已有文件系统（不格式化，推荐）\n查看设备详情 / SMART\n扫描完成，跳过挂载' "保存并退出"
+    ui_read_choice || return 0
+    choice=$UI_CHOICE
     case $choice in
       1) init_disk_mount_existing ;;
       2) init_disk_details; pause ;;
@@ -410,8 +409,9 @@ init_basics() {
 
   section "[1/5] 时区"
   kv "当前时区" "$(timedatectl show -p Timezone --value 2>/dev/null || date +%Z)"
-  printf '  1) 保持当前时区（推荐）\n  2) Asia/Shanghai\n  3) UTC\n  4) 自定义\n  5) 跳过\n  0) 保存退出\n'
-  read -r -p "请选择: " choice || return 0
+  ui_menu_list $'保持当前时区（推荐）\nAsia/Shanghai\nUTC\n自定义\n跳过' "保存退出"
+  ui_read_choice || return 0
+  choice=$UI_CHOICE
   case $choice in
     1) wizard_set TIMEZONE "$(timedatectl show -p Timezone --value 2>/dev/null || date +%Z)" ;;
     2) init_apply_timezone Asia/Shanghai ;;
@@ -424,8 +424,9 @@ init_basics() {
 
   section "[2/5] 主机名"
   kv "当前主机名" "$(hostname)"
-  printf '  1) 保持当前主机名（推荐）\n  2) web-01\n  3) db-01\n  4) proxy-01\n  5) 自定义\n  6) 随机 srv-xxxxxx\n  7) 跳过\n  0) 保存退出\n'
-  read -r -p "请选择: " choice || return 0
+  ui_menu_list $'保持当前主机名（推荐）\nweb-01\ndb-01\nproxy-01\n自定义\n随机 srv-xxxxxx\n跳过' "保存退出"
+  ui_read_choice || return 0
+  choice=$UI_CHOICE
   case $choice in
     1) wizard_set HOSTNAME "$(hostname)" ;;
     2) init_apply_hostname web-01 ;;
@@ -440,8 +441,9 @@ init_basics() {
 
   section "[3/5] 时间同步"
   kv "当前状态" "$(timedatectl show -p NTPSynchronized --value 2>/dev/null || echo 未知)"
-  printf '  1) 保持当前配置（推荐）\n  2) 启用 systemd-timesyncd\n  3) 安装并启用 chrony\n  4) 跳过\n  0) 保存退出\n'
-  read -r -p "请选择: " choice || return 0
+  ui_menu_list $'保持当前配置（推荐）\n启用 systemd-timesyncd\n安装并启用 chrony\n跳过' "保存退出"
+  ui_read_choice || return 0
+  choice=$UI_CHOICE
   case $choice in
     1) ;;
     2) init_enable_timesyncd ;;
@@ -453,8 +455,9 @@ init_basics() {
 
   section "[4/5] DNS"
   kv "当前 DNS" "$(awk '/^nameserver/ {printf "%s ", $2}' /etc/resolv.conf 2>/dev/null)"
-  printf '  1) 保持当前 DNS（推荐）\n  2) 223.5.5.5 + 1.1.1.1\n  3) 1.1.1.1 + 8.8.8.8\n  4) 自定义\n  5) 跳过\n  0) 保存退出\n'
-  read -r -p "请选择: " choice || return 0
+  ui_menu_list $'保持当前 DNS（推荐）\n223.5.5.5 + 1.1.1.1\n1.1.1.1 + 8.8.8.8\n自定义\n跳过' "保存退出"
+  ui_read_choice || return 0
+  choice=$UI_CHOICE
   case $choice in
     1) wizard_set DNS "$(awk '/^nameserver/ {printf "%s ", $2}' /etc/resolv.conf 2>/dev/null)" ;;
     2) init_apply_dns 223.5.5.5 1.1.1.1 ;;
@@ -466,8 +469,9 @@ init_basics() {
   esac
 
   section "[5/5] 更新策略"
-  printf '  1) 跳过（推荐，稍后单独更新）\n  2) 只检查可用更新\n  3) 安装全部更新（可能较慢）\n  4) 启用自动安全更新（Debian/Ubuntu、RHEL 系）\n  0) 保存退出\n'
-  read -r -p "请选择: " choice || return 0
+  ui_menu_list $'跳过（推荐，稍后单独更新）\n只检查可用更新\n安装全部更新（可能较慢）\n启用自动安全更新（Debian/Ubuntu、RHEL 系）' "保存退出"
+  ui_read_choice || return 0
+  choice=$UI_CHOICE
   case $choice in
     1) ;;
     2) init_update_check ;;
@@ -617,8 +621,9 @@ init_accounts() {
   section "账户设置"
 
   section "[1/2] root 密码"
-  printf '  1) 保持当前密码（确认已足够强）\n  2) 自定义新密码\n  3) 生成随机强密码（推荐）\n  4) 跳过\n  0) 保存退出\n'
-  read -r -p "请选择: " choice || return 0
+  ui_menu_list $'保持当前密码（确认已足够强）\n自定义新密码\n生成随机强密码（推荐）\n跳过' "保存退出"
+  ui_read_choice || return 0
+  choice=$UI_CHOICE
   case $choice in
     1) wizard_set ROOT_PASSWORD kept ;;
     2) init_set_root_password ;;
@@ -629,8 +634,9 @@ init_accounts() {
   esac
 
   section "[2/2] 管理用户"
-  printf '  1) 不创建，仅使用 root（简单场景）\n  2) 创建管理用户并复制 root 密钥（推荐）\n  3) 创建管理用户并设置密码\n  4) 使用已有用户\n  5) 跳过\n  0) 保存退出\n'
-  read -r -p "请选择: " choice || return 0
+  ui_menu_list $'不创建，仅使用 root（简单场景）\n创建管理用户并复制 root 密钥（推荐）\n创建管理用户并设置密码\n使用已有用户\n跳过' "保存退出"
+  ui_read_choice || return 0
+  choice=$UI_CHOICE
   case $choice in
     1|5) ;;
     2)
@@ -888,7 +894,7 @@ init_ssh() {
   wizard_init
   require_root
   [[ -t 0 ]] || die "SSH 设置需要在交互终端运行"
-  local old_ports new_port='' pass='' root='' minutes=10 choice login_user current_root
+  local old_ports new_port='' pass='' root='' minutes=10 choice login_user current_root rollback_hint
   old_ports=$(ssh_all_ports)
   current_root=$(ssh_cfg_get PermitRootLogin)
   section "SSH 安全设置"
@@ -898,8 +904,9 @@ init_ssh() {
   kv "管理用户" "$(wizard_get ADMIN_USER 未创建)"
 
   section "[1/4] SSH 端口"
-  printf '  1) 新增随机高位端口，保留旧端口（推荐）\n  2) 新增 2222，保留旧端口\n  3) 自定义新端口，保留旧端口\n  4) 保持当前端口\n  0) 保存退出\n'
-  read -r -p "请选择: " choice || return 0
+  ui_menu_list $'新增随机高位端口，保留旧端口（推荐）\n新增 2222，保留旧端口\n自定义新端口，保留旧端口\n保持当前端口' "保存退出"
+  ui_read_choice || return 0
+  choice=$UI_CHOICE
   case $choice in
     1)
       local i
@@ -924,8 +931,9 @@ init_ssh() {
   fi
 
   section "[2/4] 密码登录"
-  printf '  1) 禁用密码登录，仅允许密钥（有密钥时推荐）\n  2) 保持当前设置\n  3) 开启密码登录\n  0) 保存退出\n'
-  read -r -p "请选择: " choice || return 0
+  ui_menu_list $'禁用密码登录，仅允许密钥（有密钥时推荐）\n保持当前设置\n开启密码登录' "保存退出"
+  ui_read_choice || return 0
+  choice=$UI_CHOICE
   case $choice in
     1)
       init_key_ready || die "未发现可用 authorized_keys，不能禁用密码登录"
@@ -943,8 +951,9 @@ init_ssh() {
   else
     info "未验证管理用户，推荐选择 1) prohibit-password"
   fi
-  printf '  1) prohibit-password，root 仅允许密钥（推荐）\n  2) no，完全禁止 root SSH（需管理用户可用）\n  3) 保持当前设置\n  4) yes，允许 root 密码登录（高风险）\n  0) 保存退出\n'
-  read -r -p "请选择: " choice || return 0
+  ui_menu_list $'prohibit-password，root 仅允许密钥（推荐）\nno，完全禁止 root SSH（需管理用户可用）\n保持当前设置\nyes，允许 root 密码登录（高风险）' "保存退出"
+  ui_read_choice || return 0
+  choice=$UI_CHOICE
   case $choice in
     1) root=prohibit-password ;;
     2)
@@ -959,8 +968,9 @@ init_ssh() {
 
   if [[ ${INIT:-sysv} == systemd ]] && have systemd-run; then
     section "[4/4] 自动回滚"
-    printf '  1) 10 分钟（推荐）\n  2) 5 分钟\n  3) 20 分钟\n  4) 不启用自动回滚\n  0) 保存退出\n'
-    read -r -p "请选择: " choice || return 0
+    ui_menu_list $'10 分钟（推荐）\n5 分钟\n20 分钟\n不启用自动回滚' "保存退出"
+    ui_read_choice || return 0
+    choice=$UI_CHOICE
     case $choice in
       1) minutes=10 ;;
       2) minutes=5 ;;
@@ -979,7 +989,14 @@ init_ssh() {
   kv "密码登录" "${pass:-保持}"
   kv "root 登录" "${root:-保持}"
   kv "自动回滚" "$([[ $minutes -gt 0 ]] && echo "${minutes} 分钟" || echo 未启用)"
-  confirm "应用以上 SSH 设置？请保持当前会话不要关闭" || return 0
+  if (( minutes > 0 )); then
+    rollback_hint="st init ssh rollback（${minutes} 分钟自动回滚）"
+  else
+    rollback_hint="st init ssh rollback（手动回滚）"
+  fi
+  ui_confirm_danger "即将应用 SSH 设置，操作不当可能导致无法登录。" \
+    "SSH 端口、密码登录与 root 登录策略" \
+    "$rollback_hint" || return 0
 
   if [[ -z $new_port && -z $pass && -z $root ]]; then
     wizard_mark ssh done
@@ -993,8 +1010,10 @@ init_ssh() {
   [[ -n $login_user ]] || login_user=root
   local port_show=${new_port:-$old_ports}
   info "请在新终端验证：ssh -p ${port_show} ${login_user}@$(get_public_ip)"
-  printf '\n  1) 已验证，保留配置（推荐）\n  2) 未验证，立即回滚\n  3) 保留定时器，稍后执行 st init ssh keep\n  0) 保持当前选择并返回\n\n'
-  read -r -p "请选择: " choice || return 0
+  printf '\n'
+  ui_menu_list $'已验证，保留配置（推荐）\n未验证，立即回滚\n保留定时器，稍后执行 st init ssh keep' "保持当前选择并返回"
+  ui_read_choice || return 0
+  choice=$UI_CHOICE
   case $choice in
     1) init_ssh_keep ;;
     2) init_ssh_rollback ;;
@@ -1076,8 +1095,10 @@ init_firewall() {
   kv "Docker" "$(have docker && echo 已安装 || echo 未安装)"
   [[ $(have docker && echo yes) == yes ]] && warn "UFW 不能完全保护 Docker 发布的端口"
 
-  printf '\n  1) 跳过，不修改防火墙\n  2) UFW：默认拒绝入站，只放行 SSH（推荐）\n  3) UFW：默认拒绝入站，放行 SSH + 80/443\n  4) UFW：默认拒绝入站，放行 SSH + 自定义端口\n  5) firewalld：放行 SSH + 自定义端口\n  6) 关闭现有防火墙（不推荐）\n  0) 保存退出\n\n'
-  read -r -p "请选择: " choice || return 0
+  printf '\n'
+  ui_menu_list $'跳过，不修改防火墙\nUFW：默认拒绝入站，只放行 SSH（推荐）\nUFW：默认拒绝入站，放行 SSH + 80/443\nUFW：默认拒绝入站，放行 SSH + 自定义端口\nfirewalld：放行 SSH + 自定义端口\n关闭现有防火墙（不推荐）' "保存退出"
+  ui_read_choice || return 0
+  choice=$UI_CHOICE
   case $choice in
     1) wizard_set FIREWALL skipped ;;
     2) init_firewall_apply_ufw ;;
@@ -1101,7 +1122,9 @@ init_firewall() {
       init_firewall_apply_firewalld "${extra[@]}"
       ;;
     6)
-      confirm "关闭防火墙会使端口直接暴露，确认关闭？" || return 0
+      ui_confirm_danger "将关闭现有防火墙，所有端口会直接暴露。" \
+        "公网服务、Docker 端口与 SSH" \
+        "st init firewall" || return 0
       if [[ $fw == ufw ]]; then
         ufw --force disable || die "UFW 关闭失败"
         wizard_set FIREWALL disabled
@@ -1117,8 +1140,9 @@ init_firewall() {
   esac
 
   section "Fail2ban"
-  printf '  1) 安装并启用 sshd 防护（推荐）\n  2) 跳过\n  3) 查看状态\n  0) 跳过\n'
-  read -r -p "请选择: " choice || return 0
+  ui_menu_list $'安装并启用 sshd 防护（推荐）\n跳过\n查看状态' "跳过"
+  ui_read_choice || return 0
+  choice=$UI_CHOICE
   case $choice in
     1)
       if security_fail2ban_install --yes; then
@@ -1239,25 +1263,24 @@ init_hardening_sysctl() {
   kv "配置文件" "$([[ -f /etc/sysctl.d/99-stbox-security.conf ]] && echo 已应用 || echo 未应用)"
   kv "syncookies" "$(sysctl -n net.ipv4.tcp_syncookies 2>/dev/null || echo 未知)"
   kv "rp_filter" "$(sysctl -n net.ipv4.conf.all.rp_filter 2>/dev/null || echo 未知)"
-  printf '\n  1) 跳过，保持当前配置（推荐）\n  2) 应用安全配置（推荐）\n  3) 安全配置 + 严格 rp_filter（可能影响 VPN/多网卡）\n  4) 移除本工具的安全配置\n'
-  read -r -p "请选择: " choice || return 0
+  printf '\n'
+  ui_menu_list $'跳过，保持当前配置（推荐）\n应用安全配置（推荐）\n安全配置 + 严格 rp_filter（可能影响 VPN/多网卡）\n移除本工具的安全配置' "返回"
+  ui_read_choice || return 0
+  choice=$UI_CHOICE
   case $choice in
     1) wizard_set SECURITY_SYSCTL kept ;;
     2) init_security_sysctl_apply ;;
     3) init_security_sysctl_apply strict ;;
     4) init_security_sysctl_remove ;;
+    0|q|back) return 0 ;;
     *) warn "无效选项" ;;
   esac
 }
 
 init_swap_create_mb() {
-  local mb=$1 swappiness=10 rootfs avail
+  local mb=$1 swappiness=10 avail
   require_root
-  rootfs=$(findmnt -n -o FSTYPE / 2>/dev/null || stat -f -c %T / 2>/dev/null)
-  case $rootfs in
-    btrfs|zfs)
-      die "根分区为 $rootfs，请使用系统专用方式创建 SWAP，本向导不自动处理" ;;
-  esac
+  swap_rootfs_guard
   [[ $mb =~ ^[0-9]+$ ]] && (( mb >= 128 && mb <= 16384 )) || die "SWAP 大小需在 128M - 16G"
   if [[ -e $TUNE_SWAP_FILE ]] || grep -q "$TUNE_SWAP_FILE" /proc/swaps 2>/dev/null; then
     die "$TUNE_SWAP_FILE 已存在或已启用"
@@ -1330,8 +1353,10 @@ init_hardening_swap() {
       info "内存 ${mem_mb} MB，推荐 SWAP 4G"
     fi
   fi
-  printf '\n  1) 跳过，保持当前 SWAP（推荐）\n  2) 按内存推荐创建/新增\n  3) 1G\n  4) 2G\n  5) 4G\n  6) 自定义\n  7) 移除本工具创建的 SWAP\n'
-  read -r -p "请选择: " choice || return 0
+  printf '\n'
+  ui_menu_list $'跳过，保持当前 SWAP（推荐）\n按内存推荐创建/新增\n1G\n2G\n4G\n自定义\n移除本工具创建的 SWAP' "返回"
+  ui_read_choice || return 0
+  choice=$UI_CHOICE
   case $choice in
     1) wizard_set SWAP kept ;;
     2)
@@ -1349,6 +1374,7 @@ init_hardening_swap() {
       init_swap_create_mb "$mb"
       ;;
     7) init_swap_remove_hardening ;;
+    0|q|back) return 0 ;;
     *) warn "无效选项" ;;
   esac
 }
@@ -1361,12 +1387,17 @@ init_bbr_enable() {
     info "BBR 已启用"
     return 0
   fi
-  if ! bbr_available; then
+  if ! bbr_supported; then
     warn "当前内核不支持 BBR，请先升级内核"
     wizard_set BBR unsupported
     return 0
   fi
   confirm "启用 BBR（fq 队列 + bbr 拥塞控制）？" || return 0
+  if ! bbr_try_load; then
+    warn "tcp_bbr 模块加载失败，请检查内核模块"
+    wizard_set BBR unsupported
+    return 0
+  fi
   if [[ -f $file ]]; then
     backup=$(mktemp)
     cp "$file" "$backup"
@@ -1409,13 +1440,16 @@ init_hardening_bbr() {
   local choice
   section "BBR"
   kv "当前算法" "$(sysctl -n net.ipv4.tcp_congestion_control 2>/dev/null || echo 未知)"
-  kv "内核支持" "$(bbr_available && echo 是 || echo 否)"
-  printf '\n  1) 跳过，保持当前设置（推荐）\n  2) 启用 BBR\n  3) 关闭 BBR，恢复 cubic\n'
-  read -r -p "请选择: " choice || return 0
+  kv "内核支持" "$(bbr_supported && echo 是 || echo 否)"
+  printf '\n'
+  ui_menu_list $'跳过，保持当前设置（推荐）\n启用 BBR\n关闭 BBR，恢复 cubic' "返回"
+  ui_read_choice || return 0
+  choice=$UI_CHOICE
   case $choice in
     1) wizard_set BBR kept ;;
     2) init_bbr_enable ;;
     3) init_bbr_disable ;;
+    0|q|back) return 0 ;;
     *) warn "无效选项" ;;
   esac
 }
@@ -1441,7 +1475,10 @@ init_report() {
   file=$(wizard_report_write)
   wizard_mark report done
   ok "开荒报告已生成：$file"
-  info "报告权限 600，包含主机名、IP 和配置摘要，请勿公开分享"
+  ui_panel "验收报告" \
+    "报告：$file" \
+    "权限 600，包含主机名、IP 和配置摘要，请勿公开分享" \
+    "下一步：按报告建议逐项检查配置"
 }
 init_reset() {
   require_root

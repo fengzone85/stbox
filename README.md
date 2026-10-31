@@ -3,7 +3,7 @@
 面向 Linux 服务器的模块化脚本工具箱，使用 Bash 编写，同时提供交互菜单和命令行调用。
 
 - 分层结构：核心框架 + 内置模块 + 应用/脚本插件
-- 13 个功能模块、11 个 Docker 应用、53 个外部脚本入口
+- 13 个功能模块、11 个 Docker 应用、66 个外部脚本入口
 - 已在 Debian 13 / Intel J4125 完成主要功能实测
 - 所有系统级操作默认需要确认，配置变更前自动备份
 
@@ -12,15 +12,15 @@
 | 模块 | 功能 |
 |---|---|
 | 开荒向导 | 服务器预检、磁盘检测与已有文件系统挂载、时区/主机名/DNS/时间同步/更新策略、账户、SSH 改端口、防火墙与 Fail2ban、安全 sysctl/SWAP/BBR、验收报告 |
-| 系统维护 | 系统概览、环境信息、负载、磁盘、更新、深度清理、DNS、时区、主机名、root 密码、端口扫描、cron、快捷命令 |
+| 系统维护 | 系统概览、环境信息、负载、内存与缓存、磁盘、更新、深度清理、DNS、时区、主机名、root 密码、端口扫描、cron、快捷命令 |
 | 网络测试 | 网卡/IP/归属地、下载测速、ping、路由追踪、DNS 检测、端口连通、监听端口 |
 | 系统优化 | sysctl 网络参数、SWAP 创建/移除、IPv4/IPv6 优先级、apt 换源 |
-| 性能测试 | 内存压力、磁盘读写、CPU 基准、第三方综合测试 |
-| Docker | 安装、状态、容器、日志、进入容器、镜像、网络、数据卷、清理、卸载 |
+| 性能测试 | 内存压力、磁盘读写、CPU 基准、NodeQuality、TcpQuality、第三方综合测试 |
+| Docker | 安装、状态、容器、日志、进入容器、镜像、网络、数据卷、Compose 项目启停/更新、清理、卸载 |
 | 应用市场 | 一键部署常用 Docker 应用 |
 | 建站环境 | Apache + PHP 8.2 + MariaDB + Redis，静态站、WordPress、反向代理、SSL、站点备份 |
 | 实用工具 | 磁盘挂载、Git、Rclone、Fclone、WARP、BBR3、节点/面板/甲骨文/NAT/重装入口 |
-| 组件环境 | 21 个常用组件与游戏、Python/Node.js/Go/Java、tmux 工作区 |
+| 组件环境 | 22 个常用组件与游戏、Python/Node.js/Go/Java、Ansible、tmux 工作区 |
 | 安全与优化 | UFW/firewalld、SSH 端口与登录策略、BBR、Fail2ban |
 | 备份迁移 | 目录备份、MySQL 导出、恢复、定时任务、远程传输 |
 | 脚本设置 | 版本、更新、配置、日志 |
@@ -47,9 +47,27 @@ sudo bash install.sh
 st                 # 交互菜单
 st help            # 命令帮助
 st --no-color version
+st --plain version # 无色、ASCII 边框
 ```
 
 默认安装目录 `/opt/ssh-tools`，配置、数据、日志目录权限为 700，属主 root。
+
+## 界面预览
+
+```text
+╭─ STBOX 0.4.0 ────────────────────────────────────────╮
+│ SSH Tool Box · Debian 13 · 内核 6.1                  │
+│ feng-5100 · SSH 22 · UFW active · BBR bbr            │
+│ 开荒向导 3/8 完成 · 下一步：账户设置                 │
+╰──────────────────────────────────────────────────────╯
+
+│ 开荒向导 3/8 完成 · 下一步：账户设置
+
+  ✓ 预检     ✓ 磁盘     ✓ 基础     → 账户
+  · SSH      · 防火墙   · 加固     · 报告
+```
+
+`st --plain` 会关闭彩色和 Unicode 边框，适合日志、CI 或远程录制。
 
 ## 常用命令
 
@@ -197,7 +215,7 @@ st backup list
 stbox/
 ├── st.sh               # 入口
 ├── install.sh          # 安装脚本
-├── core/               # 框架：公共函数、配置、菜单、脚本市场
+├── core/               # 框架：界面组件、公共函数、配置、菜单、脚本市场
 ├── modules/            # 12 个功能模块
 ├── apps/               # Docker 应用插件
 ├── scripts/            # 第三方脚本清单
@@ -229,6 +247,9 @@ demo_info() { echo "info"; }
 
 ```bash
 bash -n st.sh install.sh core/*.sh modules/*.sh apps/*/app.sh scripts/*.conf
+bash tests/ui.sh
+bash tests/scripts.sh
+sudo bash tests/init_hardening.sh
 ```
 
 ## 文档

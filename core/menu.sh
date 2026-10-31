@@ -2,7 +2,16 @@
 # 菜单层：模块注册、主菜单、子菜单与 CLI 分发
 
 declare -A SST_MODULE_TITLE=() SST_MODULE_DESC=() SST_MODULE_ITEMS=()
+declare -A SST_MODULE_GROUP=(
+  [init]=0
+  [system]=1 [network]=1 [tune]=1 [bench]=1
+  [docker]=2 [apps]=2 [site]=2
+  [security]=3 [backup]=3 [tools]=3 [components]=3
+  [settings]=4
+)
+SST_MODULE_GROUPS=(开荒与初始化 系统与网络 应用与部署 安全与维护 设置)
 SST_MODULE_ORDER=()
+SST_BANNER_KERNEL=''
 
 sst_register_module() {
   local name=$1 title=$2 desc=$3
@@ -52,9 +61,35 @@ sst_module_run() {
   die "模块 $module 不支持操作：$action"
 }
 
+sst_module_group() {
+  local group=${SST_MODULE_GROUP[$1]:-99}
+  printf '%s' "${SST_MODULE_GROUPS[$group]:-其他}"
+}
+
+sst_banner_status() {
+  local fw fw_label bbr
+  fw=$(_fw_installed 2>/dev/null || printf 'none')
+  case $fw in
+    ufw) fw_label="UFW $(_ufw_state 2>/dev/null || printf '未知')" ;;
+    firewalld) fw_label="firewalld $(svc_state_text firewalld 2>/dev/null || printf '未知')" ;;
+    nftables|iptables) fw_label="$fw 已安装" ;;
+    *) fw_label='防火墙未安装' ;;
+  esac
+  bbr=$(sysctl -n net.ipv4.tcp_congestion_control 2>/dev/null || printf '未知')
+  printf '%s · SSH %s · %s · BBR %s' \
+    "$(hostname 2>/dev/null || printf '未知')" \
+    "$(ssh_all_ports 2>/dev/null || printf '22')" \
+    "$fw_label" "$bbr"
+}
+
 sst_print_banner() {
-  printf '\n%s%s%s\n' "$C_BOLD$C_CYAN" "  STBOX · SSH Tool Box · 服务器工具箱" "$C_RESET"
-  printf '  %s版本 %s · %s · 内核 %s%s\n' "$C_DIM" "$SST_VERSION" "$OS_NAME" "$(uname -r)" "$C_RESET"
+  [[ -n $SST_BANNER_KERNEL ]] || SST_BANNER_KERNEL=$(uname -r 2>/dev/null || printf '未知')
+  local inner line1 line2 line3
+  inner=$(( $(ui_frame_width) - 4 ))
+  line1=$(ui_fit "SSH Tool Box · ${OS_NAME} · 内核 ${SST_BANNER_KERNEL}" "$inner")
+  line2=$(ui_fit "$(sst_banner_status)" "$inner")
+  line3=$(ui_fit "开荒向导 $(wizard_progress_meta)" "$inner")
+  ui_panel "STBOX ${SST_VERSION}" "$line1" "$line2" "$line3"
 }
 
 sst_module_help() {
@@ -65,7 +100,7 @@ sst_module_help() {
   printf '用法：st %s <操作> [参数]\n\n' "$module"
   while IFS='|' read -r action label; do
     [[ -n $action ]] || continue
-    printf '  %-18s %s\n' "$action" "$label"
+    printf '  %s%s%s  %s\n' "$C_ACCENT" "$(ui_pad "$action" 18)" "$C_RESET" "$label"
   done <<<"${SST_MODULE_ITEMS[$module]}"
   printf '\n  不带参数执行 st 可进入交互菜单\n'
 }
@@ -73,23 +108,33 @@ sst_module_help() {
 sst_help() {
   section "STBOX 使用说明"
   cat <<'EOF'
-用法：st [--yes] [--no-color] <模块> <操作> [参数...]
+用法：st [--yes] [--no-color] [--plain] <模块> <操作> [参数...]
 
 模块与常用命令：
-  init      开荒向导      st init | preflight | disk scan | basics | accounts | ssh | firewall | hardening | report
-  system    系统维护      st system info | update | clean_deep | dns | timezone | hostname | rootpass | portscan | cron | shortcut
-  network   网络测试      st network info | ip | speed [MB] | ping [host] | route [host] | dns | port
-  tune      系统优化      st tune status | sysctl on/off | swap create/remove | ipv6 4/6 | mirror aliyun
-  bench     性能测试      st bench memtest | diskbench [MB] | cpu | scripts | superbench
-  docker    Docker 管理   st docker status | install | ps | exec | images | networks | volumes | prune | uninstall
-  apps      应用市场      st apps list | menu | install <名称> | remove <名称> | status <名称>
-  site     建站环境      st site install | status | add | wordpress | proxy | ssl | list | remove | backup | uninstall
-  tools     实用工具      st tools disk_mount | git | rclone | fclone | warp | bbr3 | nodes | panels | oracle | nat
-  components 组件环境     st components list | install | install_all | remove | python | nodejs | golang | java | workspace
-  security  安全与优化    st security status | firewall_status | firewall_allow <端口>
-            BBR/SSH/Fail2ban：st security bbr_on | ssh_status | fail2ban_install
-  backup    备份与迁移    st backup list | create [路径...] | restore | schedule | remote
-  settings  脚本设置      st settings version | update | config | log
+
+  开荒与初始化
+    init      开荒向导      st init | preflight | disk scan | basics | accounts | ssh | firewall | hardening | report
+
+  系统与网络
+    system    系统维护      st system info | memory | update | clean_deep | dns | timezone | hostname | rootpass | portscan | cron | shortcut
+    network   网络测试      st network info | ip | speed [MB] | ping [host] | route [host] | dns | port
+    tune      系统优化      st tune status | sysctl on/off | swap create/remove | ipv6 4/6 | mirror aliyun
+    bench     性能测试      st bench memtest | diskbench [MB] | cpu | nodequality | tcpquality | scripts
+
+  应用与部署
+    docker    Docker 管理   st docker status | install | ps | exec | images | networks | volumes | compose | prune | uninstall
+    apps      应用市场      st apps list | menu | install <名称> | remove <名称> | status <名称>
+    site     建站环境      st site install | status | add | wordpress | proxy | ssl | list | remove | backup | uninstall
+
+  安全与维护
+    security  安全与优化    st security status | firewall_status | firewall_allow <端口>
+                             BBR/SSH/Fail2ban：st security bbr_on | ssh_status | fail2ban_install
+    backup    备份与迁移    st backup list | create [路径...] | restore | schedule | remote
+    tools     实用工具      st tools disk_mount | git | rclone | fclone | warp | bbr3 | nodes | panels | oracle | nat
+    components 组件环境     st components list | install | install_all | remove | python | nodejs | golang | java | workspace
+
+  设置
+    settings  脚本设置      st settings version | update | config | log
 
 示例：
   st system update
@@ -107,7 +152,7 @@ sst_help() {
   1. 涉及系统变更的操作需要 root 权限，会自动通过 sudo 重新执行。
   2. 自动化场景使用 --yes 跳过确认；危险操作仍会打印影响范围。
   3. bench/tools 中的第三方脚本会显示来源与风险，确认后才下载执行。
-  4. 直接执行 st 进入交互菜单；--no-color 关闭彩色输出。
+  4. 直接执行 st 进入交互菜单；--no-color 关闭彩色，--plain 同时关闭彩色与 Unicode 边框。
 EOF
 }
 
@@ -123,11 +168,12 @@ docker_pick() {
   {
     printf '\n可用容器：\n'
     for i in "${!names[@]}"; do
-      printf '  %2d) %s\n' "$((i + 1))" "${names[$i]}"
+      ui_menu_item "$((i + 1))" "${names[$i]}"
     done
-    printf '\n'
+    ui_menu_footer "取消"
+    ui_read_choice "选择容器编号" || return 1
   } >&2
-  read -r -p "选择容器编号: " sel || return 1
+  sel=$UI_CHOICE
   if [[ ! $sel =~ ^[0-9]+$ ]] || (( sel < 1 || sel > ${#names[@]} )); then
     warn "无效编号"
     return 1
@@ -135,13 +181,61 @@ docker_pick() {
   printf '%s\n' "${names[$((sel - 1))]}"
 }
 
+sst_wizard_checklist() {
+  local i step status symbol color cell next total columns
+  total=${#SST_WIZARD_STEPS[@]}
+  next=$(wizard_next_step)
+  columns=4
+  (( UI_WIDTH < 50 )) && columns=2
+  (( UI_WIDTH < 26 )) && columns=1
+  printf '\n  '
+  for (( i = 0; i < total; i++ )); do
+    step=${SST_WIZARD_STEPS[$i]}
+    status=$(wizard_step_status "$step")
+    case $status in
+      done) symbol=$UI_SYM_OK color=$C_OK ;;
+      skipped) symbol=$UI_SYM_WARN color=$C_WARN ;;
+      in_progress) symbol=$UI_SYM_ARROW color=$C_ACCENT ;;
+      *)
+        if [[ $step == "$next" ]]; then
+          symbol=$UI_SYM_ARROW color=$C_ACCENT
+        else
+          symbol=$UI_SYM_BULLET color=$C_DIM
+        fi
+        ;;
+    esac
+    cell=$(ui_pad "$symbol $(wizard_step_short "$step")" 9)
+    printf '%s%s%s' "$color" "$cell" "$C_RESET"
+    if (( (i + 1) % columns == 0 )); then
+      printf '\n'
+      (( i + 1 < total )) && printf '  '
+    else
+      printf '  '
+    fi
+  done
+  (( total % columns != 0 )) && printf '\n'
+}
+
+sst_module_header() {
+  local module=$1
+  if [[ $module == init ]]; then
+    sst_wizard_checklist
+  else
+    printf '  %s%s%s\n' "$C_DIM" "${SST_MODULE_DESC[$module]}" "$C_RESET"
+  fi
+}
+
 sst_module_menu() {
   local module=$1 title=${SST_MODULE_TITLE[$1]}
-  local choice idx action label i
+  local choice idx action label i meta
   local -a actions=() labels=()
 
   while true; do
-    section "$title"
+    meta=''
+    [[ $module == init ]] && meta=$(wizard_progress_meta)
+    section "$title" "$meta"
+    sst_module_header "$module"
+    hr
     actions=() labels=()
     while IFS='|' read -r action label; do
       [[ -n $action ]] || continue
@@ -150,11 +244,17 @@ sst_module_menu() {
     done <<<"${SST_MODULE_ITEMS[$module]}"
 
     for i in "${!actions[@]}"; do
-      printf '  %s%2d%s) %s\n' "$C_GREEN" "$((i + 1))" "$C_RESET" "${labels[$i]}"
+      ui_menu_item "$((i + 1))" "${labels[$i]}"
     done
-    printf '  %s 0%s) 返回\n\n' "$C_GREEN" "$C_RESET"
+    if (( UI_WIDTH >= 48 )); then
+      printf '\n  %s0%s 返回   %sh%s 帮助   %s输入操作名可直接执行%s\n\n' \
+        "$C_ACCENT" "$C_RESET" "$C_ACCENT" "$C_RESET" "$C_DIM" "$C_RESET"
+    else
+      printf '\n  %s0%s 返回   %sh%s 帮助\n\n' \
+        "$C_ACCENT" "$C_RESET" "$C_ACCENT" "$C_RESET"
+    fi
 
-    read -r -p "请选择: " choice || break
+    read -r -p "$(ui_prompt_text '请选择')" choice || break
     case $choice in
       0|q|back|exit) break ;;
       [0-9]|[0-9][0-9])
@@ -179,23 +279,32 @@ sst_module_menu() {
 }
 
 sst_main_menu() {
-  local choice idx module
+  local choice idx module group current_group
   local -a mods=()
 
   while true; do
     sst_print_banner
     section "主菜单"
     mods=("${SST_MODULE_ORDER[@]}")
+    current_group=-1
     for idx in "${!mods[@]}"; do
       module=${mods[$idx]}
-      printf '  %s%2d%s) %-8s %s%s%s\n' \
-        "$C_GREEN" "$((idx + 1))" "$C_RESET" \
-        "${SST_MODULE_TITLE[$module]}" \
-        "$C_DIM" "${SST_MODULE_DESC[$module]}" "$C_RESET"
+      group=${SST_MODULE_GROUP[$module]:-99}
+      if (( group != current_group )); then
+        ui_group "$(sst_module_group "$module")"
+        current_group=$group
+      fi
+      ui_menu_item "$((idx + 1))" "${SST_MODULE_TITLE[$module]}" "${SST_MODULE_DESC[$module]}"
     done
-    printf '  %s 0%s) 退出\n  %s h%s) 帮助\n\n' "$C_GREEN" "$C_RESET" "$C_GREEN" "$C_RESET"
+    if (( UI_WIDTH >= 48 )); then
+      printf '\n  %s0%s 退出   %sh%s 帮助   %s输入模块名可直接进入%s\n\n' \
+        "$C_ACCENT" "$C_RESET" "$C_ACCENT" "$C_RESET" "$C_DIM" "$C_RESET"
+    else
+      printf '\n  %s0%s 退出   %sh%s 帮助\n\n' \
+        "$C_ACCENT" "$C_RESET" "$C_ACCENT" "$C_RESET"
+    fi
 
-    read -r -p "请输入编号或模块名: " choice || break
+    read -r -p "$(ui_prompt_text '请选择')" choice || break
     case $choice in
       0|q|quit|exit) break ;;
       h|help) sst_help; pause ;;

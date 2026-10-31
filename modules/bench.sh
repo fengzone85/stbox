@@ -3,7 +3,7 @@
 # 原生实现内存/磁盘/CPU 测试，第三方测试脚本统一走脚本市场。
 
 sst_register_module bench "性能测试" "内存 磁盘 CPU 与综合测试"
-SST_MODULE_ITEMS[bench]=$'memtest|内存压力测试\ndiskbench|磁盘读写测试\ncpu|CPU 基准测试\nscripts|第三方测试脚本\nsuperbench|Superbench 综合测试\nlemonbench|Lemonbench 综合测试\nunixbench|UNIXbench 综合测试\nyabs|YABS 综合测试\nsuperspeed|三网测速\nspeedtest|Ookla SpeedTest\nmedia|流媒体解锁检测\nmt|MT 流媒体检测\ntubecheck|YouTube CDN 检测\nbesttrace|Besttrace 路由追踪\ndisktest|Disk Test 综合测试\nroutetrace|三网回程路由'
+SST_MODULE_ITEMS[bench]=$'memtest|内存压力测试\ndiskbench|磁盘读写测试\ncpu|CPU 基准测试\nscripts|第三方测试脚本\nsuperbench|Superbench 综合测试\nlemonbench|Lemonbench 综合测试\nunixbench|UNIXbench 综合测试\nyabs|YABS 综合测试\nnodequality|NodeQuality 综合测试\ntcpquality|TCP 质量测试\nsuperspeed|三网测速\nspeedtest|Ookla SpeedTest\nmedia|流媒体解锁检测\nmt|MT 流媒体检测\ntubecheck|YouTube CDN 检测\nbesttrace|Besttrace 路由追踪\ndisktest|Disk Test 综合测试\nroutetrace|三网回程路由'
 
 bench_memtest() {
   require_root
@@ -65,3 +65,7 @@ bench_cpu() {
 }
 
 bench_scripts() { scripts_menu 测试; }
+
+bench_nodequality() { scripts_run nodequality "$@"; }
+
+bench_tcpquality() { scripts_run tcpquality "$@"; }

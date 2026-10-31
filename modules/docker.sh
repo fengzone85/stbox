@@ -151,17 +151,97 @@ docker_prune() {
   docker system df 2>/dev/null || true
 }
 
-docker_compose() {
-  docker_require || return 1
-  section "Compose 项目"
+docker_compose_ps() {
   if docker compose version >/dev/null 2>&1; then
     docker compose ls 2>/dev/null || true
   elif have docker-compose; then
     docker ps -a --filter 'label=com.docker.compose.project' \
       --format 'table {{.Label "com.docker.compose.project"}}\t{{.Names}}\t{{.Status}}' 2>/dev/null
   else
-    warn "未安装 Docker Compose，可参考：apt install docker-compose-plugin"
+    return 1
   fi
+}
+
+docker_compose_file() {
+  local path f
+  path=$(ask "Compose 文件或项目目录" ".")
+  [[ -n $path ]] || return 1
+  if [[ -d $path ]]; then
+    for f in "$path/compose.yml" "$path/compose.yaml" "$path/docker-compose.yml" "$path/docker-compose.yaml"; do
+      if [[ -f $f ]]; then
+        printf '%s\n' "$f"
+        return 0
+      fi
+    done
+    warn "目录中未找到 compose.yml / docker-compose.yml：$path"
+    return 1
+  fi
+  if [[ ! -f $path ]]; then
+    warn "Compose 文件不存在：$path"
+    return 1
+  fi
+  printf '%s\n' "$path"
+}
+
+docker_compose() {
+  docker_require || return 1
+  section "Compose 项目"
+  if ! docker_compose_ps; then
+    warn "未安装 Docker Compose，可参考：apt install docker-compose-plugin"
+    return 0
+  fi
+  [[ -t 0 ]] || return 0
+
+  local choice file
+  ui_menu_list $'启动/更新项目\n拉取镜像并更新\n停止并移除项目\n重启项目\n查看最近日志' "返回"
+  ui_read_choice || return 0
+  choice=$UI_CHOICE
+  case $choice in
+    0|q|back) return 0 ;;
+    1|2|3|4|5) ;;
+    *) warn "无效选项：$choice"; return 0 ;;
+  esac
+
+  file=$(docker_compose_file) || return 0
+  case $choice in
+    1)
+      if compose_run -f "$file" up -d; then
+        ok "Compose 项目已启动/更新：$file"
+        compose_run -f "$file" ps 2>/dev/null || true
+      else
+        warn "Compose 启动失败：$file"
+      fi
+      ;;
+    2)
+      if compose_run -f "$file" pull && compose_run -f "$file" up -d; then
+        ok "镜像已拉取并更新：$file"
+        compose_run -f "$file" ps 2>/dev/null || true
+      else
+        warn "镜像拉取或更新失败：$file"
+      fi
+      ;;
+    3)
+      ui_confirm_danger "将停止并移除 Compose 项目容器。" \
+        "项目文件：$file（数据卷默认保留）" \
+        "重新启动：st docker compose" || return 0
+      if compose_run -f "$file" down --remove-orphans; then
+        ok "Compose 项目已停止：$file"
+      else
+        warn "Compose 停止失败：$file"
+      fi
+      ;;
+    4)
+      if compose_run -f "$file" restart; then
+        ok "Compose 项目已重启：$file"
+        compose_run -f "$file" ps 2>/dev/null || true
+      else
+        warn "Compose 重启失败：$file"
+      fi
+      ;;
+    5)
+      compose_run -f "$file" logs --tail=50 || warn "读取日志失败：$file"
+      ;;
+  esac
 }
 
 docker_exec() {
@@ -187,8 +267,12 @@ docker_images() {
 
   local i sel
   printf '\n'
-  for i in "${!ids[@]}"; do printf '  %2d) %s\n' "$((i + 1))" "${labels[$i]}"; done
-  read -r -p "要删除的镜像编号（0 返回）: " sel || return 0
+  for i in "${!ids[@]}"; do
+    ui_menu_item "$((i + 1))" "${labels[$i]}"
+  done
+  ui_menu_footer
+  ui_read_choice "要删除的镜像编号" || return 0
+  sel=$UI_CHOICE
   [[ $sel == 0 ]] && return 0
   [[ $sel =~ ^[0-9]+$ ]] && (( sel >= 1 && sel <= ${#ids[@]} )) || die "无效编号"
   confirm "删除镜像 ${labels[$((sel - 1))]}？" || return 0
@@ -204,8 +288,12 @@ docker_networks() {
   mapfile -t names < <(docker network ls --format '{{.Name}}' 2>/dev/null)
   local i sel
   printf '\n'
-  for i in "${!names[@]}"; do printf '  %2d) %s\n' "$((i + 1))" "${names[$i]}"; done
-  read -r -p "要删除的网络编号（0 返回）: " sel || return 0
+  for i in "${!names[@]}"; do
+    ui_menu_item "$((i + 1))" "${names[$i]}"
+  done
+  ui_menu_footer
+  ui_read_choice "要删除的网络编号" || return 0
+  sel=$UI_CHOICE
   [[ $sel == 0 ]] && return 0
   [[ $sel =~ ^[0-9]+$ ]] && (( sel >= 1 && sel <= ${#names[@]} )) || die "无效编号"
   local name=${names[$((sel - 1))]}
@@ -225,8 +313,12 @@ docker_volumes() {
   mapfile -t names < <(docker volume ls --format '{{.Name}}' 2>/dev/null)
   local i sel
   printf '\n'
-  for i in "${!names[@]}"; do printf '  %2d) %s\n' "$((i + 1))" "${names[$i]}"; done
-  read -r -p "要删除的卷编号（0 返回）: " sel || return 0
+  for i in "${!names[@]}"; do
+    ui_menu_item "$((i + 1))" "${names[$i]}"
+  done
+  ui_menu_footer
+  ui_read_choice "要删除的卷编号" || return 0
+  sel=$UI_CHOICE
   [[ $sel == 0 ]] && return 0
   [[ $sel =~ ^[0-9]+$ ]] && (( sel >= 1 && sel <= ${#names[@]} )) || die "无效编号"
   local name=${names[$((sel - 1))]}

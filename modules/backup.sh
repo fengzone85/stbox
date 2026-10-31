@@ -123,14 +123,18 @@ backup_restore() {
     local -a files=()
     mapfile -t files < <(ls -1t "$dir"/full-*.tar.gz 2>/dev/null)
     [[ ${#files[@]} -gt 0 ]] || die "没有可用备份"
-    local i
+    local i choice
     section "选择备份"
     for i in "${!files[@]}"; do
-      printf '  %2d) %s\n' "$((i + 1))" "$(basename "${files[$i]}")"
+      ui_menu_item "$((i + 1))" "$(basename "${files[$i]}")"
     done
-    local choice
-    read -r -p "选择编号: " choice || return 1
-    [[ $choice =~ ^[0-9]+$ ]] && (( choice >= 1 && choice <= ${#files[@]} )) || die "无效编号"
+    ui_menu_footer "取消"
+    ui_read_choice "选择编号" || return 1
+    choice=$UI_CHOICE
+    [[ $choice =~ ^[0-9]+$ ]] && (( choice >= 1 && choice <= ${#files[@]} )) || {
+      [[ $choice == 0 || $choice == q || $choice == back ]] && return 0
+      die "无效编号"
+    }
     file=${files[$((choice - 1))]}
   fi
   [[ -f $file ]] || die "备份文件不存在：$file"

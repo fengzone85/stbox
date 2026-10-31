@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # 模块：系统信息与基础维护
 
-sst_register_module system "系统维护" "信息 更新 清理 DNS 定时"
-SST_MODULE_ITEMS[system]=$'info|系统概览\nenv|系统环境\nload|资源负载\ndisk|磁盘占用\nclean|清理系统垃圾\nupdate|系统更新\nclean_deep|深度清理\ndns|DNS 设置\ntimezone|时区设置\nhostname|主机名\nrootpass|修改 root 密码\nportscan|端口扫描\ncron|定时任务\nshortcut|快捷命令'
+sst_register_module system "系统维护" "信息 内存 更新 清理 DNS"
+SST_MODULE_ITEMS[system]=$'info|系统概览\nenv|系统环境\nload|资源负载\nmemory|内存与缓存\ndisk|磁盘占用\nclean|清理系统垃圾\nupdate|系统更新\nclean_deep|深度清理\ndns|DNS 设置\ntimezone|时区设置\nhostname|主机名\nrootpass|修改 root 密码\nportscan|端口扫描\ncron|定时任务\nshortcut|快捷命令'
 
 system_info() {
   local cpu cores mem_total mem_used mem_avail mem_pct load disk rx tx ip
@@ -82,6 +82,72 @@ system_load() {
   ps -eo pid,pcpu,pmem,comm --sort=-pmem 2>/dev/null | head -n 6 || true
 }
 
+system_memory_status() {
+  local mem_total mem_used mem_avail pct cached buffers swap_total swap_free swap_used
+  read -r mem_total mem_used mem_avail <<<"$(get_mem_info)"
+  pct=0
+  if [[ $mem_total =~ ^[0-9]+$ ]] && (( mem_total > 0 )); then
+    pct=$((mem_used * 100 / mem_total))
+  fi
+  cached=$(awk '/^Cached:/ {print $2}' /proc/meminfo 2>/dev/null)
+  buffers=$(awk '/^Buffers:/ {print $2}' /proc/meminfo 2>/dev/null)
+  swap_total=$(awk '/^SwapTotal:/ {print $2}' /proc/meminfo 2>/dev/null)
+  swap_free=$(awk '/^SwapFree:/ {print $2}' /proc/meminfo 2>/dev/null)
+  cached=$(( ${cached:-0} / 1024 ))
+  buffers=$(( ${buffers:-0} / 1024 ))
+  swap_total=$(( ${swap_total:-0} / 1024 ))
+  swap_free=$(( ${swap_free:-0} / 1024 ))
+  swap_used=$((swap_total - swap_free))
+
+  section "内存与缓存"
+  kv "内存" "${mem_used}/${mem_total} MB（${pct}%，可用 ${mem_avail} MB）"
+  kv "缓存" "${cached} MB"
+  kv "缓冲区" "${buffers} MB"
+  if (( swap_total > 0 )); then
+    kv "SWAP" "${swap_used}/${swap_total} MB"
+  else
+    kv "SWAP" "未启用"
+  fi
+  hr
+  printf '  内存占用前 10\n'
+  if ps -eo pid,comm,rss --sort=-rss >/dev/null 2>&1; then
+    ps -eo pid,comm,rss --sort=-rss 2>/dev/null | head -n 11 \
+      | awk 'NR == 1 {printf "  %8s %-24s %10s\n", "PID", "进程", "RSS(MB)"; next}
+             {printf "  %8s %-24s %10.1f\n", $1, $2, $3 / 1024}'
+  else
+    ps aux 2>/dev/null | sort -k6 -nr | head -n 10 || true
+  fi
+}
+
+system_memory_drop_caches() {
+  require_root
+  ui_confirm_danger "将执行 sync，并清理页缓存、目录项和 inode。" \
+    "可能造成短暂 IO 抖动，不会删除磁盘数据" \
+    "无需回滚，缓存会随访问自动重建" || return 0
+  sync
+  if printf '3' >/proc/sys/vm/drop_caches 2>/dev/null; then
+    ok "缓存清理请求已执行"
+  else
+    warn "无法写入 /proc/sys/vm/drop_caches（容器或权限限制）"
+  fi
+  system_memory_status
+}
+
+system_memory() {
+  system_memory_status
+  [[ -t 0 ]] || return 0
+  local choice
+  ui_menu_list $'刷新内存信息\n清理页缓存（sync + drop_caches）' "返回"
+  ui_read_choice || return 0
+  choice=$UI_CHOICE
+  case $choice in
+    1) system_memory_status ;;
+    2) system_memory_drop_caches ;;
+    0|q|back) return 0 ;;
+    *) warn "无效选项：$choice" ;;
+  esac
+}
+
 system_disk() {
   section "文件系统占用"
   df -hT 2>/dev/null || df -h
@@ -136,6 +202,9 @@ system_update() {
   ok "系统更新完成"
   if [[ -f /var/run/reboot-required ]]; then
     warn "系统提示需要重启：/var/run/reboot-required"
+    ui_panel "更新完成" "系统软件包已更新" "检测到需要重启" "建议安排维护窗口后执行 reboot"
+  else
+    ui_panel "更新完成" "系统软件包已更新" "当前未检测到重启标记"
   fi
   if have needrestart; then
     needrestart -b 2>/dev/null || true
@@ -292,10 +361,10 @@ system_cron() {
   if [[ -z $action ]]; then
     system_cron list
     [[ -t 0 ]] || return 0
-    printf '  %s1%s) 添加任务\n  %s2%s) 删除本工具任务\n  %s0%s) 返回\n\n' \
-      "$C_GREEN" "$C_RESET" "$C_GREEN" "$C_RESET" "$C_GREEN" "$C_RESET"
     local choice
-    read -r -p "请选择: " choice || return 0
+    ui_menu_list $'添加任务\n删除本工具任务'
+    ui_read_choice || return 0
+    choice=$UI_CHOICE
     case $choice in
       1) action=add ;;
       2) action=remove ;;
@@ -347,13 +416,17 @@ EOF
       mapfile -t files < <(ls -1 /etc/cron.d/sst-* 2>/dev/null)
       [[ ${#files[@]} -gt 0 ]] || { info "没有本工具创建的定时任务"; return 0; }
       section "选择要删除的任务"
-      local i
+      local i choice
       for i in "${!files[@]}"; do
-        printf '  %2d) %s\n' "$((i + 1))" "$(basename "${files[$i]}")"
+        ui_menu_item "$((i + 1))" "$(basename "${files[$i]}")"
       done
-      local choice
-      read -r -p "编号: " choice || return 1
-      [[ $choice =~ ^[0-9]+$ ]] && (( choice >= 1 && choice <= ${#files[@]} )) || die "无效编号"
+      ui_menu_footer "取消"
+      ui_read_choice "选择编号" || return 1
+      choice=$UI_CHOICE
+      [[ $choice =~ ^[0-9]+$ ]] && (( choice >= 1 && choice <= ${#files[@]} )) || {
+        [[ $choice == 0 || $choice == q || $choice == back ]] && return 0
+        die "无效编号"
+      }
       rm -f "${files[$((choice - 1))]}"
       ok "已删除 ${files[$((choice - 1))]}"
       ;;

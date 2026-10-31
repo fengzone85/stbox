@@ -3,7 +3,7 @@
 > 面向 Linux 服务器的模块化脚本工具箱，采用 **核心框架 + 内置模块 + 应用/脚本插件** 三层结构，
 > 同时提供交互菜单与命令行调用。
 
-版本基线：v0.3.5（已在 Debian 13 / J4125 完成实测）
+版本基线：v0.4.0（已在 Debian 13 / J4125 完成主要功能实测）
 
 ---
 
@@ -55,7 +55,7 @@ core/common    core/menu      core/apps     core/scripts   core/config
 | 应用插件 | `apps/`、`plugins/apps/` | 应用元数据 + Compose 生命周期 | 新增应用目录 |
 | 脚本市场 | `scripts/`、`plugins/scripts/` | 第三方脚本登记、来源与风险展示、下载执行 | 新增 `<name>.conf` |
 
-加载顺序由 `st.sh` 固定：`common → config → apps → scripts → update → menu`，
+加载顺序由 `st.sh` 固定：`ui → common → config → apps → scripts → update → menu`，
 然后 `sst_load_scripts` 扫描脚本清单，`sst_load_modules` 扫描 `modules/*.sh`，`sst_load_apps` 扫描应用目录。
 
 ---
@@ -68,6 +68,7 @@ stbox/
 ├── install.sh             # 部署到 /opt/ssh-tools + 注册 /usr/local/bin/st
 ├── VERSION
 ├── core/
+│   ├── ui.sh              # 界面能力：配色、符号、宽度、面板、菜单组件
 │   ├── common.sh          # 基础能力
 │   ├── config.sh          # settings.conf 键值配置
 │   ├── wizard.sh          # 开荒向导状态与报告
@@ -256,14 +257,15 @@ scripts_run <name>
 
 ---
 
-## 8. 命令规范（v0.3.5）
+## 8. 命令规范（v0.4.0）
 
 ```
 st                                  交互主菜单
 st help                             帮助
 st version                          版本与路径
+st --plain version                  无色 + ASCII 边框输出
 
-st system   info | env | load | disk | clean | update | clean_deep
+st system   info | env | load | memory | disk | clean | update | clean_deep
             dns [地址...] | timezone [时区] | hostname [名称] | rootpass
             portscan [目标] [端口数] | cron [list|add|remove] | shortcut [字母]
 st init     wizard | preflight | disk [scan] | basics | accounts
@@ -271,7 +273,7 @@ st init     wizard | preflight | disk [scan] | basics | accounts
 st network  info | ip | speed [MB] | ping [host] | route [host] | dns | port | listen
 st tune     status | sysctl [status|on|off] | swap [status|create|remove]
             ipv6 [status|4|6] | mirror [aliyun|tuna|ustc|163|restore]
-st bench    memtest | diskbench [MB] | cpu | scripts | <脚本名>
+st bench    memtest | diskbench [MB] | cpu | nodequality | tcpquality | scripts | <脚本名>
 st docker   status | install | ps | logs [容器] | restart|start|stop|exec [容器]
             images | networks | volumes | prune | compose | uninstall
 st apps     list | menu | install <名称> | remove <名称> | status <名称>
@@ -348,8 +350,12 @@ st --no-color version
 
 ```bash
 bash -n st.sh core/*.sh modules/*.sh apps/*/app.sh install.sh
+bash tests/ui.sh
+bash tests/scripts.sh
 # 可选：shellcheck -x st.sh core/*.sh modules/*.sh
 ```
+
+`tests/init_hardening.sh` 会临时修改 sysctl 与 BBR 配置，需要 root 运行，退出时自动恢复现场。
 
 只读验证（无需 Docker/防火墙）：
 
