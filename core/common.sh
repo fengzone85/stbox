@@ -15,19 +15,24 @@ ARCH=${ARCH:-$(uname -m)}
 
 sst_init_dirs() {
   mkdir -p "$SST_CONFIG_DIR" "$SST_DATA_DIR/backups" "$SST_DATA_DIR/apps" "$SST_LOG_DIR" 2>/dev/null || true
+  chmod 600 "$SST_LOG" 2>/dev/null || true
 }
 
 # ---------- 输出与日志 ----------
 sst_log() {
   local level=$1
   shift
-  { printf '%s [%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$level" "$*" >>"$SST_LOG"; } 2>/dev/null || true
+  ( umask 077; printf '%s [%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$level" "$*" >>"$SST_LOG" ) 2>/dev/null || true
 }
 info() { ui_status info "$*"; sst_log INFO "$*"; }
 ok()   { ui_status ok "$*"; sst_log OK "$*"; }
 warn() { ui_status warn "$*" >&2; sst_log WARN "$*"; }
 err()  { ui_status err "$*" >&2; sst_log ERROR "$*"; }
 die()  { err "$*"; exit 1; }
+
+# 敏感信息仅输出到终端，不写入日志
+secret_info() { ui_status info "$*"; }
+secret_ok()   { ui_status ok "$*"; }
 
 section() { ui_section "${1:-}" "${2:-}"; }
 kv()      { ui_kv "${1:-}" "${2:-}"; }

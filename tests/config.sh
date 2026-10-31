@@ -77,6 +77,24 @@ else
 fi
 grep -q 'MYSQL_PWD' "$SST_HOME/modules/site.sh" && pass "site.sh 使用 MYSQL_PWD" || fail "site.sh 未使用 MYSQL_PWD"
 
+section "敏感信息与日志"
+: >"$SST_LOG"
+secret_info "SECRET-TOKEN-XYZ" >/dev/null 2>&1
+secret_ok "SECRET-OK-XYZ" >/dev/null 2>&1
+if grep -qE 'SECRET-(TOKEN|OK)-XYZ' "$SST_LOG"; then
+  fail "敏感信息不应写入日志"
+else
+  pass "敏感信息未写入日志"
+fi
+info "normal-log-line" >/dev/null 2>&1
+grep -q 'normal-log-line' "$SST_LOG" && pass "普通信息正常写入日志" || fail "普通信息未写入日志"
+chmod 644 "$SST_LOG"
+sst_init_dirs >/dev/null 2>&1
+check_eq "日志权限为 600" 600 "$(stat -c %a "$SST_LOG" 2>/dev/null || echo unknown)"
+grep -q 'secret_ok "root 密码已更新' "$SST_HOME/modules/init.sh" && pass "root 密码使用 secret_ok" || fail "root 密码未使用 secret_ok"
+grep -q 'secret_info "访问密码' "$SST_HOME/apps/code-server/app.sh" && pass "code-server 密码使用 secret_info" || fail "code-server 密码未使用 secret_info"
+grep -q 'secret_info "连接 Token' "$SST_HOME/apps/vscode/app.sh" && pass "VS Code Token 使用 secret_info" || fail "VS Code Token 未使用 secret_info"
+
 section "测试结果"
 kv "通过" "$PASS"
 kv "失败" "$FAIL"

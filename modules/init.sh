@@ -539,8 +539,8 @@ init_generate_root_password() {
   [[ -n $p ]] || die "密码生成失败"
   init_set_user_password root "$p" || die "root 密码修改失败"
   wizard_set ROOT_PASSWORD changed
-  ok "root 密码已更新：$p"
-  warn "请立即保存该密码，之后不再显示"
+  secret_ok "root 密码已更新：$p"
+  warn "请立即保存该密码，之后不再显示；注意终端回滚缓冲、录屏或会话日志可能留存"
 }
 
 init_create_admin_user() {
