@@ -137,6 +137,7 @@ st --yes --no-color system info
 ```
 
 - 模块动作函数命名约定：`<module>_<action>`，例如 `system_info`、`security_bbr_on`。
+- 入口启用 `set -uo pipefail`；新增变量需提供默认值，避免未定义变量静默为空。
 - 动作需要额外参数时直接透传，例如 `st network speed 100`、`st backup create /etc /var/www`。
 - `--yes` 只跳过普通确认；恢复备份仍需输入 `RESTORE`（非交互时例外）。
 

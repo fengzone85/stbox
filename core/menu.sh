@@ -83,7 +83,7 @@ sst_banner_status() {
 }
 
 sst_print_banner() {
-  [[ -n $SST_BANNER_KERNEL ]] || SST_BANNER_KERNEL=$(uname -r 2>/dev/null || printf '未知')
+  [[ -n ${SST_BANNER_KERNEL:-} ]] || SST_BANNER_KERNEL=$(uname -r 2>/dev/null || printf '未知')
   local inner line1 line2 line3
   inner=$(( $(ui_frame_width) - 4 ))
   line1=$(ui_fit "SSH Tool Box · ${OS_NAME} · 内核 ${SST_BANNER_KERNEL}" "$inner")

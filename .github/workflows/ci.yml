@@ -28,6 +28,12 @@ jobs:
         run: bash tests/menu.sh
       - name: Config and cron tests
         run: bash tests/config.sh
+      - name: Entry smoke (set -u)
+        run: |
+          bash st.sh --no-color version >/dev/null
+          bash st.sh --no-color help >/dev/null
+          bash st.sh --no-color apps list >/dev/null
+          bash st.sh --no-color ai status >/dev/null
 
   container-smoke:
     runs-on: ubuntu-latest
@@ -44,6 +50,8 @@ jobs:
               apk add --no-cache bash >/dev/null
             fi
             bash /src/st.sh --no-color version
+            bash /src/st.sh --no-color apps list
+            bash /src/st.sh --no-color ai status
             bash /src/tests/ui.sh
             bash /src/tests/scripts.sh
             bash /src/tests/ai.sh

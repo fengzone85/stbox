@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # STBOX（SSH Tool Box）入口：解析全局参数，加载框架后按模块分发
-set -o pipefail
+set -uo pipefail
 
 # 解析软链接，确保通过 /usr/local/bin/st 启动时仍能找到真实安装目录
 SST_SOURCE=${BASH_SOURCE[0]}

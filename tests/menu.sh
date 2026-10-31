@@ -52,6 +52,10 @@ for m in "${SST_MODULE_ORDER[@]}"; do
 done
 (( FAIL == 0 )) && pass "所有菜单动作可分发"
 
+section "入口严格模式"
+grep -q 'set -uo pipefail' "$SST_HOME/st.sh" && pass "入口启用 set -u" || fail "入口未启用 set -u"
+grep -q '${SST_BANNER_KERNEL:-}' "$SST_HOME/core/menu.sh" && pass "banner 变量有默认值" || fail "banner 变量未做默认值保护"
+
 section "测试结果"
 kv "通过" "$PASS"
 kv "失败" "$FAIL"
