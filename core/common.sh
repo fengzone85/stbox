@@ -285,8 +285,24 @@ download_with_fallback() {
 }
 
 get_mem_info() {
-  # 输出：总量/已用/可用（MB），兼容含 Available 列的 free
-  free -m 2>/dev/null | awk 'NR==2 {print $2, $3, ($7 != "" ? $7 : $4)}'
+  # 输出：总量/已用/可用（MB），优先 free，缺失时读取 /proc/meminfo
+  local out
+  out=$(free -m 2>/dev/null | awk 'NR==2 {print $2, $3, ($7 != "" ? $7 : $4)}')
+  if [[ -n $out ]]; then
+    printf '%s\n' "$out"
+    return 0
+  fi
+  awk '
+    /MemTotal/ { total = $2 }
+    /MemAvailable/ { avail = $2 }
+    /MemFree/ { free = $2 }
+    END {
+      if (total == "") { print ""; exit }
+      if (avail == "") avail = free
+      used = total - avail
+      printf "%d %d %d\n", total / 1024, used / 1024, avail / 1024
+    }
+  ' /proc/meminfo 2>/dev/null
 }
 
 get_rx_tx() {

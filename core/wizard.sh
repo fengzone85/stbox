@@ -3,7 +3,7 @@
 
 SST_WIZARD_DIR="$SST_DATA_DIR/init"
 SST_WIZARD_STATE="$SST_WIZARD_DIR/state.conf"
-SST_WIZARD_STEPS=(preflight disk basics accounts ssh firewall report)
+SST_WIZARD_STEPS=(preflight disk basics accounts ssh firewall hardening report)
 
 wizard_init() {
   mkdir -p "$SST_WIZARD_DIR" 2>/dev/null || true
@@ -63,6 +63,7 @@ wizard_step_label() {
     accounts) printf '账户设置' ;;
     ssh) printf 'SSH 安全' ;;
     firewall) printf '防火墙与防护' ;;
+    hardening) printf '系统加固' ;;
     report) printf '验收报告' ;;
     *) printf '%s' "$1" ;;
   esac
@@ -82,6 +83,9 @@ wizard_status_table() {
   [[ -n $(wizard_get SSH_NEW_PORT) ]] && kv "SSH 新端口" "$(wizard_get SSH_NEW_PORT)"
   [[ -n $(wizard_get SSH_STATUS) ]] && kv "SSH 状态" "$(wizard_get SSH_STATUS)"
   [[ -n $(wizard_get FIREWALL) ]] && kv "防火墙" "$(wizard_get FIREWALL)"
+  [[ -n $(wizard_get SECURITY_SYSCTL) ]] && kv "安全参数" "$(wizard_get SECURITY_SYSCTL)"
+  [[ -n $(wizard_get SWAP) ]] && kv "SWAP" "$(wizard_get SWAP)"
+  [[ -n $(wizard_get BBR) ]] && kv "BBR" "$(wizard_get BBR)"
 }
 
 wizard_report_write() {
@@ -115,6 +119,9 @@ wizard_report_write() {
     printf '| 管理用户 | %s |\n' "$(wizard_get ADMIN_USER 未创建)"
     printf '| 防火墙 | %s |\n' "$(_fw_installed 2>/dev/null || echo 未知)"
     printf '| Fail2ban | %s |\n' "$(have fail2ban-client && svc_state_text fail2ban || echo 未安装)"
+    printf '| 安全参数 | %s |\n' "$(wizard_get SECURITY_SYSCTL 未应用)"
+    printf '| SWAP | %s |\n' "$(wizard_get SWAP 未创建)"
+    printf '| BBR | %s |\n' "$(wizard_get BBR $(sysctl -n net.ipv4.tcp_congestion_control 2>/dev/null || echo 未知))"
     printf '| TCP 算法 | %s |\n' "$(sysctl -n net.ipv4.tcp_congestion_control 2>/dev/null || echo 未知)"
     printf '| 数据盘 | %s |\n' "$(wizard_get DATA_DISKS 未挂载)"
     printf '\n## 后续建议\n\n'

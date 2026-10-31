@@ -2,7 +2,7 @@
 # 模块：开荒向导（预检 / 磁盘 / 基础信息 / 账户 / SSH / 防火墙 / 报告）
 
 sst_register_module init "开荒向导" "预检 磁盘 账户 SSH 防火墙"
-SST_MODULE_ITEMS[init]=$'wizard|开始/继续开荒\npreflight|服务器预检\ndisk|磁盘检测与挂载\nbasics|基础信息设置\naccounts|账户设置\nssh|SSH 安全\nfirewall|防火墙与防护\nstatus|查看进度\nreport|生成报告\nreset|重置向导'
+SST_MODULE_ITEMS[init]=$'wizard|开始/继续开荒\npreflight|服务器预检\ndisk|磁盘检测与挂载\nbasics|基础信息设置\naccounts|账户设置\nssh|SSH 安全\nfirewall|防火墙与防护\nhardening|系统加固\nstatus|查看进度\nreport|生成报告\nreset|重置向导'
 
 init_status() {
   require_root
@@ -15,13 +15,17 @@ init_status() {
 
 init_preflight_show() {
   local mem_total mem_used mem_avail cpu cores disk swap_state ip keys ufw docker_ver
-  local ssh_ports root_login pass_auth bbr tz
+  local ssh_ports root_login pass_auth bbr tz syncookie
   cpu=$(get_cpu_model)
   [[ -n $cpu ]] || cpu="未知"
   cores=$(nproc 2>/dev/null || echo 未知)
   read -r mem_total mem_used mem_avail <<<"$(get_mem_info)"
   disk=$(df -h / 2>/dev/null | awk 'NR==2 {printf "%s 已用 %s (%s)", $2, $3, $5}')
-  swap_state=$(free -m 2>/dev/null | awk 'NR==3 {if ($2 == 0) print "未启用"; else printf "%d/%d MB (%d%%)", $3, $2, $3 * 100 / $2}')
+  if have free; then
+    swap_state=$(free -m 2>/dev/null | awk 'NR==3 {if ($2 == 0) print "未启用"; else printf "%d/%d MB (%d%%)", $3, $2, $3 * 100 / $2}')
+  else
+    swap_state=$(awk '/SwapTotal/ {t=$2} /SwapFree/ {f=$2} END {if (t == 0) print "未启用"; else printf "%d/%d MB", t/1024-f/1024, t/1024}' /proc/meminfo 2>/dev/null)
+  fi
   ip=$(get_public_ip)
   keys=$(find /root /home -maxdepth 4 -name authorized_keys -type f -size +0c 2>/dev/null | wc -l)
   ufw=$(_fw_installed)
@@ -65,7 +69,8 @@ init_preflight_show() {
   [[ $root_login == yes ]] && warn "当前允许 root 密码登录，安全基线建议收紧"
   [[ $ufw == ufw && $(_ufw_state) == inactive ]] && warn "UFW 未启用，安全基线建议启用"
   have docker && warn "已安装 Docker：UFW 不能完全保护 Docker 发布的端口"
-  sysctl -n net.ipv4.tcp_syncookies 2>/dev/null | grep -qx 1 || warn "TCP syncookies 未启用"
+  syncookie=$(sysctl -n net.ipv4.tcp_syncookies 2>/dev/null || true)
+  [[ -n $syncookie && $syncookie != 1 ]] && warn "TCP syncookies 未启用"
 }
 
 init_preflight() {
@@ -499,6 +504,17 @@ init_key_ready() {
   [[ -s /root/.ssh/authorized_keys ]]
 }
 
+init_set_user_password() {
+  local user=$1 pass=$2
+  if have chpasswd; then
+    printf '%s:%s\n' "$user" "$pass" | chpasswd
+  elif have passwd; then
+    printf '%s\n' "$pass" | passwd --stdin "$user"
+  else
+    return 1
+  fi
+}
+
 init_set_root_password() {
   local p1 p2
   read -r -s -p "新的 root 密码: " p1 || return 1
@@ -507,7 +523,8 @@ init_set_root_password() {
   printf '\n'
   [[ -n $p1 && $p1 == "$p2" ]] || die "两次密码不一致或为空"
   (( ${#p1} >= 8 )) || die "密码至少需要 8 位"
-  printf 'root:%s\n' "$p1" | chpasswd || die "root 密码修改失败"
+  [[ $p1 != *:* ]] || die "密码不能包含冒号"
+  init_set_user_password root "$p1" || die "root 密码修改失败"
   wizard_set ROOT_PASSWORD changed
   ok "root 密码已修改"
 }
@@ -516,7 +533,7 @@ init_generate_root_password() {
   local p
   p=$(tr -dc 'A-Za-z0-9' </dev/urandom | head -c 20)
   [[ -n $p ]] || die "密码生成失败"
-  printf 'root:%s\n' "$p" | chpasswd || die "root 密码修改失败"
+  init_set_user_password root "$p" || die "root 密码修改失败"
   wizard_set ROOT_PASSWORD changed
   ok "root 密码已更新：$p"
   warn "请立即保存该密码，之后不再显示"
@@ -574,7 +591,8 @@ init_create_admin_user() {
       printf '\n'
       [[ -n $p1 && $p1 == "$p2" ]] || die "两次密码不一致或为空"
       (( ${#p1} >= 8 )) || die "密码至少需要 8 位"
-      printf '%s:%s\n' "$username" "$p1" | chpasswd || die "设置用户密码失败"
+      [[ $p1 != *:* ]] || die "密码不能包含冒号"
+      init_set_user_password "$username" "$p1" || die "设置用户密码失败"
       ;;
     *) die "未知认证方式：$mode" ;;
   esac
@@ -1118,6 +1136,305 @@ init_firewall() {
   ok "防火墙与防护步骤完成"
 }
 
+# ---------- P3：系统加固 ----------
+
+init_openrc_sysctl_loader() {
+  [[ ${INIT:-} == systemd ]] && return 0
+  mkdir -p /etc/local.d
+  cat >/etc/local.d/99-stbox-sysctl.start <<'EOF'
+#!/bin/sh
+for f in /etc/sysctl.d/99-stbox-security.conf /etc/sysctl.d/99-stbox-swap.conf /etc/sysctl.d/99-sst-bbr.conf; do
+  [ -f "$f" ] && sysctl -p "$f" >/dev/null 2>&1
+done
+EOF
+  chmod +x /etc/local.d/99-stbox-sysctl.start
+  if have rc-update; then
+    rc-update add local default >/dev/null 2>&1 || true
+  fi
+}
+
+init_security_sysctl_apply() {
+  local strict=${1:-}
+  local file=/etc/sysctl.d/99-stbox-security.conf backup=''
+  local check key expected actual
+  require_root
+  if [[ -f $file ]]; then
+    backup=$(mktemp)
+    cp "$file" "$backup"
+    backup_config_file "$file" stbox-security >/dev/null 2>&1 || true
+  fi
+
+  {
+    printf '# managed by stbox\n'
+    printf 'net.ipv4.tcp_syncookies = 1\n'
+    printf 'net.ipv4.conf.all.accept_redirects = 0\n'
+    printf 'net.ipv4.conf.default.accept_redirects = 0\n'
+    printf 'net.ipv4.conf.all.send_redirects = 0\n'
+    printf 'net.ipv4.conf.default.send_redirects = 0\n'
+    printf 'net.ipv4.conf.all.accept_source_route = 0\n'
+    printf 'net.ipv4.conf.default.accept_source_route = 0\n'
+    printf 'net.ipv4.icmp_echo_ignore_broadcasts = 1\n'
+    printf 'net.ipv4.icmp_ignore_bogus_error_responses = 1\n'
+    printf 'net.ipv4.conf.all.log_martians = 1\n'
+    printf 'net.ipv6.conf.all.accept_redirects = 0\n'
+    printf 'net.ipv6.conf.all.accept_source_route = 0\n'
+    printf 'fs.protected_hardlinks = 1\n'
+    printf 'fs.protected_symlinks = 1\n'
+    [[ -n $strict ]] && printf 'net.ipv4.conf.all.rp_filter = 1\nnet.ipv4.conf.default.rp_filter = 1\n'
+  } >"$file"
+
+  if ! sysctl -p "$file" >/dev/null 2>&1 && ! sysctl -e -p "$file" >/dev/null 2>&1; then
+    if [[ -n $backup ]]; then cp "$backup" "$file"; else rm -f "$file"; fi
+    sysctl --system >/dev/null 2>&1 || true
+    rm -f "$backup"
+    die "安全 sysctl 应用失败，已还原配置"
+  fi
+
+  local -a checks=(
+    "net.ipv4.tcp_syncookies=1"
+    "net.ipv4.conf.all.accept_redirects=0"
+    "net.ipv4.conf.all.send_redirects=0"
+    "net.ipv4.conf.all.accept_source_route=0"
+    "net.ipv4.icmp_echo_ignore_broadcasts=1"
+    "net.ipv4.icmp_ignore_bogus_error_responses=1"
+    "fs.protected_hardlinks=1"
+    "fs.protected_symlinks=1"
+  )
+  [[ -n $strict ]] && checks+=("net.ipv4.conf.all.rp_filter=1" "net.ipv4.conf.default.rp_filter=1")
+
+  for check in "${checks[@]}"; do
+    key=${check%=*}
+    expected=${check#*=}
+    actual=$(sysctl -n "$key" 2>/dev/null || true)
+    [[ -z $actual ]] && continue
+    if [[ $actual != "$expected" ]]; then
+      if [[ -n $backup ]]; then cp "$backup" "$file"; else rm -f "$file"; fi
+      sysctl --system >/dev/null 2>&1 || true
+      rm -f "$backup"
+      die "安全参数校验失败：$key=$actual，已还原"
+    fi
+  done
+  rm -f "$backup"
+  init_openrc_sysctl_loader
+  wizard_set SECURITY_SYSCTL "$([[ -n $strict ]] && echo strict || echo safe)"
+  ok "安全 sysctl 已应用：$file"
+  [[ -n $strict ]] && warn "rp_filter 可能影响 VPN、多网卡或非对称路由，如有异常请移除"
+}
+
+init_security_sysctl_remove() {
+  require_root
+  rm -f /etc/sysctl.d/99-stbox-security.conf
+  if [[ ! -f /etc/sysctl.d/99-stbox-swap.conf && ! -f /etc/sysctl.d/99-sst-bbr.conf ]]; then
+    rm -f /etc/local.d/99-stbox-sysctl.start
+  fi
+  sysctl --system >/dev/null 2>&1 || true
+  wizard_set SECURITY_SYSCTL removed
+  warn "配置已移除；已运行的参数可能保持到重启"
+  ok "安全 sysctl 配置已移除"
+}
+
+init_hardening_sysctl() {
+  local choice
+  section "安全 sysctl"
+  kv "配置文件" "$([[ -f /etc/sysctl.d/99-stbox-security.conf ]] && echo 已应用 || echo 未应用)"
+  kv "syncookies" "$(sysctl -n net.ipv4.tcp_syncookies 2>/dev/null || echo 未知)"
+  kv "rp_filter" "$(sysctl -n net.ipv4.conf.all.rp_filter 2>/dev/null || echo 未知)"
+  printf '\n  1) 跳过，保持当前配置（推荐）\n  2) 应用安全配置（推荐）\n  3) 安全配置 + 严格 rp_filter（可能影响 VPN/多网卡）\n  4) 移除本工具的安全配置\n'
+  read -r -p "请选择: " choice || return 0
+  case $choice in
+    1) wizard_set SECURITY_SYSCTL kept ;;
+    2) init_security_sysctl_apply ;;
+    3) init_security_sysctl_apply strict ;;
+    4) init_security_sysctl_remove ;;
+    *) warn "无效选项" ;;
+  esac
+}
+
+init_swap_create_mb() {
+  local mb=$1 swappiness=10 rootfs avail
+  require_root
+  rootfs=$(findmnt -n -o FSTYPE / 2>/dev/null || stat -f -c %T / 2>/dev/null)
+  case $rootfs in
+    btrfs|zfs)
+      die "根分区为 $rootfs，请使用系统专用方式创建 SWAP，本向导不自动处理" ;;
+  esac
+  [[ $mb =~ ^[0-9]+$ ]] && (( mb >= 128 && mb <= 16384 )) || die "SWAP 大小需在 128M - 16G"
+  if [[ -e $TUNE_SWAP_FILE ]] || grep -q "$TUNE_SWAP_FILE" /proc/swaps 2>/dev/null; then
+    die "$TUNE_SWAP_FILE 已存在或已启用"
+  fi
+  if swapon --show --noheadings 2>/dev/null | grep -q .; then
+    warn "系统已有 SWAP，本次将新增一个 $TUNE_SWAP_FILE"
+  fi
+  avail=$(df -Pm / | awk 'NR==2 {print $4}')
+  if [[ $avail =~ ^[0-9]+$ ]] && (( avail < mb * 2 )); then
+    confirm "根分区可用 ${avail} MB，创建 ${mb} MB SWAP 后空间紧张，继续？" || return 0
+  else
+    confirm "创建 ${mb} MB SWAP 并写入 /etc/fstab？" || return 0
+  fi
+
+  if ! fallocate -l "${mb}M" "$TUNE_SWAP_FILE" 2>/dev/null; then
+    dd if=/dev/zero of="$TUNE_SWAP_FILE" bs=1M count="$mb" status=none || die "创建 SWAP 文件失败"
+  fi
+  chmod 600 "$TUNE_SWAP_FILE"
+  mkswap "$TUNE_SWAP_FILE" >/dev/null || { rm -f "$TUNE_SWAP_FILE"; die "mkswap 失败"; }
+  if ! swapon "$TUNE_SWAP_FILE"; then
+    rm -f "$TUNE_SWAP_FILE"
+    die "swapon 失败"
+  fi
+
+  backup_config_file /etc/fstab fstab >/dev/null 2>&1 || true
+  if ! awk -v f="$TUNE_SWAP_FILE" '$1 == f {found=1} END {exit !found}' /etc/fstab; then
+    printf '%s none swap sw 0 0\n' "$TUNE_SWAP_FILE" >>/etc/fstab
+  fi
+  {
+    printf '# managed by stbox\n'
+    printf 'vm.swappiness = %s\n' "$swappiness"
+  } >/etc/sysctl.d/99-stbox-swap.conf
+  sysctl -p /etc/sysctl.d/99-stbox-swap.conf >/dev/null 2>&1 || warn "swappiness 应用失败"
+  init_openrc_sysctl_loader
+  wizard_set SWAP "file:${mb}MB"
+  ok "SWAP 已创建：${mb}MB（swappiness=$swappiness）"
+}
+
+init_swap_remove_hardening() {
+  require_root
+  if [[ ! -e $TUNE_SWAP_FILE ]] && ! grep -q "$TUNE_SWAP_FILE" /proc/swaps 2>/dev/null; then
+    info "未发现本工具创建的 $TUNE_SWAP_FILE"
+    return 0
+  fi
+  confirm "关闭并删除 $TUNE_SWAP_FILE，同时清理 fstab 与 swappiness 配置？" || return 0
+  swapoff "$TUNE_SWAP_FILE" >/dev/null 2>&1 || die "swapoff 失败"
+  backup_config_file /etc/fstab fstab >/dev/null 2>&1 || true
+  local tmp
+  tmp=$(mktemp)
+  awk -v f="$TUNE_SWAP_FILE" '$1 != f' /etc/fstab >"$tmp" && cat "$tmp" >/etc/fstab
+  rm -f "$tmp"
+  rm -f "$TUNE_SWAP_FILE" /etc/sysctl.d/99-stbox-swap.conf
+  if [[ ! -f /etc/sysctl.d/99-stbox-security.conf && ! -f /etc/sysctl.d/99-sst-bbr.conf ]]; then
+    rm -f /etc/local.d/99-stbox-sysctl.start
+  fi
+  sysctl --system >/dev/null 2>&1 || true
+  wizard_set SWAP removed
+  ok "SWAP 文件已移除"
+}
+
+init_hardening_swap() {
+  local choice mem_mb mb size
+  section "SWAP"
+  tune_swap_status
+  mem_mb=$(get_mem_info | awk '{print $1}')
+  if [[ $mem_mb =~ ^[0-9]+$ ]]; then
+    if (( mem_mb <= 4096 )); then
+      info "内存 ${mem_mb} MB，推荐 SWAP 2G"
+    else
+      info "内存 ${mem_mb} MB，推荐 SWAP 4G"
+    fi
+  fi
+  printf '\n  1) 跳过，保持当前 SWAP（推荐）\n  2) 按内存推荐创建/新增\n  3) 1G\n  4) 2G\n  5) 4G\n  6) 自定义\n  7) 移除本工具创建的 SWAP\n'
+  read -r -p "请选择: " choice || return 0
+  case $choice in
+    1) wizard_set SWAP kept ;;
+    2)
+      if [[ $mem_mb =~ ^[0-9]+$ ]] && (( mem_mb <= 4096 )); then mb=2048; else mb=4096; fi
+      init_swap_create_mb "$mb"
+      ;;
+    3) init_swap_create_mb 1024 ;;
+    4) init_swap_create_mb 2048 ;;
+    5) init_swap_create_mb 4096 ;;
+    6)
+      size=$(ask "SWAP 大小（如 512M、1G）" "1G")
+      [[ $size =~ ^([0-9]+)([GgMm])$ ]] || die "大小格式错误"
+      mb=${BASH_REMATCH[1]}
+      [[ ${BASH_REMATCH[2]} == G || ${BASH_REMATCH[2]} == g ]] && mb=$((mb * 1024))
+      init_swap_create_mb "$mb"
+      ;;
+    7) init_swap_remove_hardening ;;
+    *) warn "无效选项" ;;
+  esac
+}
+
+init_bbr_enable() {
+  local file=/etc/sysctl.d/99-sst-bbr.conf backup=''
+  require_root
+  if [[ $(sysctl -n net.ipv4.tcp_congestion_control 2>/dev/null) == bbr ]]; then
+    wizard_set BBR bbr
+    info "BBR 已启用"
+    return 0
+  fi
+  if ! bbr_available; then
+    warn "当前内核不支持 BBR，请先升级内核"
+    wizard_set BBR unsupported
+    return 0
+  fi
+  confirm "启用 BBR（fq 队列 + bbr 拥塞控制）？" || return 0
+  if [[ -f $file ]]; then
+    backup=$(mktemp)
+    cp "$file" "$backup"
+    backup_config_file "$file" bbr >/dev/null 2>&1 || true
+  fi
+  {
+    printf '# managed by stbox\n'
+    printf 'net.core.default_qdisc = fq\n'
+    printf 'net.ipv4.tcp_congestion_control = bbr\n'
+  } >"$file"
+  if ! sysctl -p "$file" >/dev/null 2>&1; then
+    if [[ -n $backup ]]; then cp "$backup" "$file"; else rm -f "$file"; fi
+    rm -f "$backup"
+    die "BBR 配置应用失败，已还原"
+  fi
+  rm -f "$backup"
+  init_openrc_sysctl_loader
+  if [[ $(sysctl -n net.ipv4.tcp_congestion_control 2>/dev/null) == bbr ]]; then
+    wizard_set BBR bbr
+    ok "BBR 已启用"
+  else
+    warn "配置已写入，当前算法未切换，重启后可能生效"
+  fi
+}
+
+init_bbr_disable() {
+  require_root
+  confirm "关闭 BBR 并恢复 cubic/fq_codel？" || return 0
+  rm -f /etc/sysctl.d/99-sst-bbr.conf
+  sysctl -w net.ipv4.tcp_congestion_control=cubic >/dev/null 2>&1 || true
+  sysctl -w net.core.default_qdisc=fq_codel >/dev/null 2>&1 || true
+  if [[ ! -f /etc/sysctl.d/99-stbox-security.conf && ! -f /etc/sysctl.d/99-stbox-swap.conf ]]; then
+    rm -f /etc/local.d/99-stbox-sysctl.start
+  fi
+  wizard_set BBR cubic
+  ok "BBR 已关闭"
+}
+
+init_hardening_bbr() {
+  local choice
+  section "BBR"
+  kv "当前算法" "$(sysctl -n net.ipv4.tcp_congestion_control 2>/dev/null || echo 未知)"
+  kv "内核支持" "$(bbr_available && echo 是 || echo 否)"
+  printf '\n  1) 跳过，保持当前设置（推荐）\n  2) 启用 BBR\n  3) 关闭 BBR，恢复 cubic\n'
+  read -r -p "请选择: " choice || return 0
+  case $choice in
+    1) wizard_set BBR kept ;;
+    2) init_bbr_enable ;;
+    3) init_bbr_disable ;;
+    *) warn "无效选项" ;;
+  esac
+}
+
+init_hardening() {
+  wizard_init
+  require_root
+  [[ -t 0 ]] || die "系统加固需要在交互终端运行"
+  section "系统加固与可选优化"
+  kv "根分区" "$(findmnt -n -o FSTYPE / 2>/dev/null || stat -f -c %T / 2>/dev/null || echo 未知)"
+  kv "SWAP" "$(swapon --show --noheadings 2>/dev/null | awk '{printf "%s(%s) ", $1, $3}' | sed 's/^/ /' || echo 未启用)"
+  kv "TCP 算法" "$(sysctl -n net.ipv4.tcp_congestion_control 2>/dev/null || echo 未知)"
+  init_hardening_sysctl
+  init_hardening_swap
+  init_hardening_bbr
+  wizard_mark hardening done
+  ok "系统加固步骤完成"
+}
+
 init_report() {
   require_root
   local file
@@ -1126,7 +1443,6 @@ init_report() {
   ok "开荒报告已生成：$file"
   info "报告权限 600，包含主机名、IP 和配置摘要，请勿公开分享"
 }
-
 init_reset() {
   require_root
   confirm "清除向导进度？不会还原任何系统配置" || return 0
@@ -1194,7 +1510,15 @@ init_wizard() {
     fi
   fi
 
+  if [[ $(wizard_step_status hardening) != done ]]; then
+    init_hardening
+    if [[ $(wizard_step_status hardening) != done ]]; then
+      warn "系统加固步骤未完成，已保存进度"
+      return 0
+    fi
+  fi
+
   init_report
   wizard_status_table
-  ok "开荒流程完成：预检、磁盘、基础信息、账户、SSH、防火墙、报告"
+  ok "开荒流程完成：预检、磁盘、基础信息、账户、SSH、防火墙、系统加固、报告"
 }

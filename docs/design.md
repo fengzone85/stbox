@@ -3,7 +3,7 @@
 > 面向 Linux 服务器的模块化脚本工具箱，采用 **核心框架 + 内置模块 + 应用/脚本插件** 三层结构，
 > 同时提供交互菜单与命令行调用。
 
-版本基线：v0.3.4（已在 Debian 13 / J4125 完成实测）
+版本基线：v0.3.5（已在 Debian 13 / J4125 完成实测）
 
 ---
 
@@ -256,7 +256,7 @@ scripts_run <name>
 
 ---
 
-## 8. 命令规范（v0.3.4）
+## 8. 命令规范（v0.3.5）
 
 ```
 st                                  交互主菜单
@@ -267,7 +267,7 @@ st system   info | env | load | disk | clean | update | clean_deep
             dns [地址...] | timezone [时区] | hostname [名称] | rootpass
             portscan [目标] [端口数] | cron [list|add|remove] | shortcut [字母]
 st init     wizard | preflight | disk [scan] | basics | accounts
-            ssh [keep|rollback|status] | firewall | status | report | reset
+            ssh [keep|rollback|status] | firewall | hardening | status | report | reset
 st network  info | ip | speed [MB] | ping [host] | route [host] | dns | port | listen
 st tune     status | sysctl [status|on|off] | swap [status|create|remove]
             ipv6 [status|4|6] | mirror [aliyun|tuna|ustc|163|restore]
@@ -397,6 +397,7 @@ st help
 | 账户 | root 密码、管理用户 + sudo + 密钥 |
 | SSH | 新增非 22 端口并保留旧端口、密码登录、root 登录、10 分钟自动回滚 |
 | 防火墙 | UFW/firewalld、放行全部 SSH 端口、可选 80/443、Fail2ban |
+| 系统加固 | 安全 sysctl、可选严格 rp_filter、SWAP、BBR |
 | 报告 | 进度写入 `data/init/state.conf`，报告写入 `data/init/report-*.md`（600 权限） |
 
 命令：
@@ -409,6 +410,7 @@ st init basics
 st init accounts
 st init ssh [keep|rollback|status]
 st init firewall
+st init hardening
 st init status
 st init report
 st init reset
@@ -436,7 +438,18 @@ st init reset
 - 自动安全更新由用户选择，不默认开启
 - 支持范围：Debian/Ubuntu、RHEL/Fedora/Rocky/Alma、Alpine 尽量覆盖；不再支持 CentOS
 
-### 13.3 后续
+### 13.3 系统加固
 
-- sysctl 安全 profile、SWAP、BBR 等系统加固
+- 安全 sysctl 写入 `/etc/sysctl.d/99-stbox-security.conf`，启用后可用 `4) 移除`
+- 默认项：syncookies、禁 ICMP 重定向/源路由、忽略广播 ICMP、记录 martians、硬链接/软链接保护
+- 可选严格 `rp_filter`，会提示 VPN/多网卡/非对称路由风险
+- SWAP 创建独立 `/swapfile`，大小可选 1G/2G/4G/自定义，写入 fstab 与 swappiness
+- btrfs/ZFS 根分区不自动创建 SWAP
+- BBR 可选启用/关闭，写入独立 sysctl 文件
+- 非 systemd 系统（Alpine）生成 `/etc/local.d` 启动脚本加载 sysctl
+
+### 13.4 后续
+
+- 真实 RHEL/Alpine 服务器上的 SSH、防火墙与用户路径验证
 - 失败场景的更多自动化测试（端口冲突、sshd 校验失败、防火墙失败）
+- 站点/应用与开荒向导之间的联动

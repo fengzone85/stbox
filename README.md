@@ -11,7 +11,7 @@
 
 | 模块 | 功能 |
 |---|---|
-| 开荒向导 | 服务器预检、磁盘检测与已有文件系统挂载、时区/主机名/DNS/时间同步/更新策略、账户、SSH 改端口、防火墙与 Fail2ban、验收报告 |
+| 开荒向导 | 服务器预检、磁盘检测与已有文件系统挂载、时区/主机名/DNS/时间同步/更新策略、账户、SSH 改端口、防火墙与 Fail2ban、安全 sysctl/SWAP/BBR、验收报告 |
 | 系统维护 | 系统概览、环境信息、负载、磁盘、更新、深度清理、DNS、时区、主机名、root 密码、端口扫描、cron、快捷命令 |
 | 网络测试 | 网卡/IP/归属地、下载测速、ping、路由追踪、DNS 检测、端口连通、监听端口 |
 | 系统优化 | sysctl 网络参数、SWAP 创建/移除、IPv4/IPv6 优先级、apt 换源 |
@@ -64,6 +64,7 @@ st init ssh              # SSH 端口/密码登录/root 登录
 st init ssh keep         # 验证新端口后保留配置
 st init ssh rollback     # 立即回滚 SSH
 st init firewall         # 防火墙与 Fail2ban
+st init hardening        # 安全 sysctl / SWAP / BBR
 st init status           # 查看进度
 st init report           # 生成开荒报告
 
@@ -126,6 +127,7 @@ st backup list
 - **账户**：root 密码自定义/随机、创建管理用户 + sudo + 密钥
 - **SSH**：默认新增非 22 端口并保留旧端口、禁用密码登录、root 登录策略
 - **防火墙**：UFW/firewalld 默认拒绝入站，放行全部 SSH 端口，可选 80/443，可选 Fail2ban
+- **系统加固**：安全 sysctl（syncookies、禁重定向、源路由、硬链接/软链接保护）、可选严格 rp_filter、SWAP、BBR
 - **状态与报告**：进度保存在 `data/init/state.conf`，报告写入 `data/init/report-*.md`
 
 安全性约定：
@@ -136,8 +138,17 @@ st backup list
 - SSH 变更默认启用 10 分钟自动回滚；`st init ssh keep` 确认保留，`st init ssh rollback` 立即回滚
 - 禁用密码登录前检查 `authorized_keys`；禁止 root SSH 前验证管理用户密钥与 sudo
 - 防火墙启用前自动放行全部 SSH 端口
+- 安全 sysctl 使用独立配置文件，可移除；严格 rp_filter 会提示 VPN/多网卡风险
+- SWAP 仅引导创建独立 `/swapfile`，btrfs/ZFS 根分区不自动处理
 - 自动更新由用户选择，不默认开启
 - 报告权限 600，不保存密码/私钥
+
+兼容性：
+
+- Debian 13：完整实测
+- Rocky Linux 9 / RHEL 系：预检、内存回退、用户与防火墙路径已做兼容；systemd 固有能力需真实服务器验证
+- Alpine 3.20：预检、状态、磁盘扫描通过；无 systemd 时自动回滚、hostnamectl/timedatectl 会跳过或回退
+- 不再支持 CentOS
 
 ## 应用市场
 
