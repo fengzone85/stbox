@@ -58,6 +58,17 @@ core/common    core/menu      core/apps     core/scripts   core/config
 加载顺序由 `st.sh` 固定：`ui → common → config → apps → scripts → update → menu`，
 然后 `sst_load_scripts` 扫描脚本清单，`sst_load_modules` 扫描 `modules/*.sh`，`sst_load_apps` 扫描应用目录。
 
+### 单文件发布模式
+
+`build.sh` 把 `core/`、`modules/`、`apps/`、`scripts/` 拼接为 `stbox.sh`，并内嵌应用与脚本清单，
+运行时设置 `SST_BUNDLED=1`，跳过目录扫描。单文件模式：
+
+- 数据独立存放：root 为 `/var/lib/stbox`，普通用户为 `~/.local/share/stbox`，避免写入 `/usr/local/bin`。
+- 支持 `st install`：把当前单文件复制到 `/usr/local/bin/st`。
+- 自更新下载 `stbox.sh` 与 `stbox.sh.sha256`，校验 SHA256 与 `bash -n` 后替换，保留 `st.bak`。
+- 不支持 `plugins/` 自动扫描；需要插件扩展时使用源码安装模式。
+- 源码仍是唯一维护来源；修改后必须执行 `bash build.sh` 重新生成产物，CI 会校验产物是否与源码一致。
+
 ---
 
 ## 3. 目录结构
@@ -66,6 +77,9 @@ core/common    core/menu      core/apps     core/scripts   core/config
 stbox/
 ├── st.sh                  # 入口命令
 ├── install.sh             # 部署到 /opt/ssh-tools + 注册 /usr/local/bin/st
+├── build.sh               # 生成单文件发布产物
+├── stbox.sh               # 单文件产物（build.sh 生成，随仓库发布）
+├── stbox.sh.sha256        # 单文件校验值
 ├── VERSION
 ├── core/
 │   ├── ui.sh              # 界面能力：配色、符号、宽度、面板、菜单组件
@@ -306,6 +320,7 @@ st settings version | update | config | log
   - `BACKUP_DIR`（默认 `data/backups`）
   - `BACKUP_TARGETS`（默认 `/etc /var/www`）
   - `BACKUP_RETENTION`（默认 0/7，定时备份时写入）
+- 单文件模式的状态目录为 `/var/lib/stbox`，其下仍有 `config/`、`data/`、`logs/`；可用 `STBOX_STATE_DIR` 覆盖。
 - `data/backups/full-<时间戳>.tar.gz` + `.manifest`；配置备份在 `data/backups/config/`。恢复时目标目录不存在会自动创建；非交互模式必须显式指定备份文件。
 - `data/scripts/<name>-<arch>`：脚本市场下载缓存，重复执行不必重新下载。
 - `data/backups/site-<时间戳>.tar.gz`：建站环境文件与全量数据库备份。
@@ -349,21 +364,31 @@ st settings version | update | config | log
 ## 11. 安装与验证
 
 ```bash
-# 在仓库目录
+# 源码目录
 sudo bash install.sh      # 部署到 /opt/ssh-tools，注册 st
 st                        # 交互菜单
+st --no-color version
+
+# 单文件
+curl -fsSL cdn.jsdelivr.net/gh/fengzone85/stbox/i.sh | sudo bash
 st --no-color version
 ```
 
 安装后会解析 `st` 软链接，确保入口始终指向真实安装目录；`data/`、`config/`、`logs/` 权限为 700、属主 root。安装脚本最后会用 `st` 命令做入口自检。
 
+单文件模式由 `i.sh` 下载 `stbox.sh`、校验 SHA256 后复制到 `/usr/local/bin/st`，状态目录与程序目录分离。不要使用 `sudo bash <(curl ...)`，sudo 会关闭进程替换的文件描述符。
+
 静态检查（开发机）：
 
 ```bash
-bash -n st.sh core/*.sh modules/*.sh apps/*/app.sh install.sh
+bash -n st.sh core/*.sh modules/*.sh apps/*/app.sh install.sh build.sh i.sh
 bash tests/ui.sh
 bash tests/scripts.sh
 bash tests/ai.sh
+bash tests/apps.sh
+bash tests/menu.sh
+bash tests/config.sh
+bash build.sh && bash tests/bundle.sh
 # 可选：shellcheck -x st.sh core/*.sh modules/*.sh
 ```
 

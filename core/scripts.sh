@@ -21,6 +21,7 @@ declare -A SST_SCRIPT_ARCH=()
 SST_SCRIPT_ORDER=()
 
 sst_load_scripts() {
+  [[ ${SST_BUNDLED:-0} -eq 1 ]] && return 0
   SST_SCRIPT_ORDER=()
   SST_SCRIPT_TITLE=() SST_SCRIPT_DESC=() SST_SCRIPT_CATEGORY=()
   SST_SCRIPT_URL=() SST_SCRIPT_MODE=() SST_SCRIPT_ARG=()

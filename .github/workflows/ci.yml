@@ -15,7 +15,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Bash syntax
         run: |
-          bash -n st.sh install.sh core/*.sh modules/*.sh apps/*/app.sh tests/*.sh
+          bash -n st.sh install.sh build.sh i.sh core/*.sh modules/*.sh apps/*/app.sh tests/*.sh
       - name: UI tests
         run: bash tests/ui.sh
       - name: Script catalog tests
@@ -35,6 +35,48 @@ jobs:
           bash st.sh --no-color apps list >/dev/null
           bash st.sh --no-color ai status >/dev/null
 
+  bundle:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build single-file bundle
+        run: bash build.sh
+      - name: Verify bundle is committed
+        run: |
+          bash build.sh --check
+          git diff --exit-code stbox.sh stbox.sh.sha256
+      - name: Bundle tests
+        run: |
+          bash -n stbox.sh
+          bash tests/bundle.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: stbox-single-file
+          path: |
+            stbox.sh
+            stbox.sh.sha256
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: bundle
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build bundle
+        run: bash build.sh
+      - name: Publish release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" stbox.sh stbox.sh.sha256 --clobber
+          else
+            gh release create "$tag" stbox.sh stbox.sh.sha256 --generate-notes
+          fi
+
   container-smoke:
     runs-on: ubuntu-latest
     strategy:
@@ -52,10 +94,13 @@ jobs:
             bash /src/st.sh --no-color version
             bash /src/st.sh --no-color apps list
             bash /src/st.sh --no-color ai status
+            bash /src/stbox.sh --no-color version
+            bash /src/stbox.sh --no-color apps list
             bash /src/tests/ui.sh
             bash /src/tests/scripts.sh
             bash /src/tests/ai.sh
             bash /src/tests/apps.sh
             bash /src/tests/menu.sh
             bash /src/tests/config.sh
+            bash /src/tests/bundle.sh
           '

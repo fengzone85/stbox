@@ -7,14 +7,28 @@ if ! declare -F ui_init >/dev/null 2>&1; then
   source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)/ui.sh"
 fi
 
-SST_CONFIG_DIR="$SST_HOME/config"
-SST_DATA_DIR="$SST_HOME/data"
-SST_LOG_DIR="$SST_HOME/logs"
+if [[ ${SST_BUNDLED:-0} -eq 1 ]]; then
+  if [[ ${EUID:-1} -eq 0 ]]; then
+    SST_STATE_DIR=${STBOX_STATE_DIR:-/var/lib/stbox}
+  else
+    SST_STATE_DIR=${STBOX_STATE_DIR:-${XDG_DATA_HOME:-${HOME:-/root}/.local/share}/stbox}
+  fi
+  SST_CONFIG_DIR="$SST_STATE_DIR/config"
+  SST_DATA_DIR="$SST_STATE_DIR/data"
+  SST_LOG_DIR="$SST_STATE_DIR/logs"
+else
+  SST_STATE_DIR="$SST_HOME"
+  SST_CONFIG_DIR="$SST_HOME/config"
+  SST_DATA_DIR="$SST_HOME/data"
+  SST_LOG_DIR="$SST_HOME/logs"
+fi
 SST_LOG="$SST_LOG_DIR/sst.log"
+export SST_STATE_DIR
 ARCH=${ARCH:-$(uname -m)}
 
 sst_init_dirs() {
   mkdir -p "$SST_CONFIG_DIR" "$SST_DATA_DIR/backups" "$SST_DATA_DIR/apps" "$SST_LOG_DIR" 2>/dev/null || true
+  [[ ${SST_BUNDLED:-0} -eq 1 ]] && chmod 700 "$SST_STATE_DIR" 2>/dev/null || true
   chmod 600 "$SST_LOG" 2>/dev/null || true
 }
 

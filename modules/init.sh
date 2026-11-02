@@ -789,6 +789,16 @@ init_ssh_cancel_timer() {
   wizard_set SSH_TIMER_UNIT ''
 }
 
+init_ssh_rollback_script() {
+  if [[ ${SST_BUNDLED:-0} -eq 1 ]]; then
+    declare -F stbox_write_ssh_rollback >/dev/null 2>&1 || return 1
+    stbox_write_ssh_rollback || return 1
+    printf '%s\n' "$SST_STATE_DIR/ssh-rollback.sh"
+  else
+    printf '%s\n' "$SST_HOME/core/ssh-rollback.sh"
+  fi
+}
+
 init_ssh_arm_timer() {
   local minutes=$1 unit=stbox-ssh-rollback
   (( minutes > 0 )) || return 0
@@ -796,12 +806,14 @@ init_ssh_arm_timer() {
     warn "当前环境不支持 systemd 定时回滚，请手动验证并保留配置"
     return 0
   fi
+  local rollback
+  rollback=$(init_ssh_rollback_script) || { warn "准备 SSH 回滚脚本失败"; return 1; }
   init_ssh_cancel_timer
   wizard_set SSH_KEEP 0
   wizard_set SSH_SERVICE "$(ssh_service_name)"
   wizard_set ROLLBACK_LOG "$SST_WIZARD_DIR/ssh-rollback.log"
   if systemd-run --collect --unit="$unit" --on-active="${minutes}m" \
-    --timer-property=AccuracySec=1s /bin/bash "$SST_HOME/core/ssh-rollback.sh" "$SST_WIZARD_STATE"; then
+    --timer-property=AccuracySec=1s /bin/bash "$rollback" "$SST_WIZARD_STATE"; then
     wizard_set SSH_TIMER_UNIT "$unit"
     wizard_set SSH_TIMER_MIN "$minutes"
     ok "已启用 ${minutes} 分钟自动回滚；确认可登录后执行 st init ssh keep"
@@ -870,7 +882,9 @@ init_ssh_rollback() {
   wizard_init
   init_ssh_cancel_timer
   wizard_set SSH_KEEP 0
-  bash "$SST_HOME/core/ssh-rollback.sh" "$SST_WIZARD_STATE" || die "SSH 回滚失败"
+  local rollback
+  rollback=$(init_ssh_rollback_script) || die "准备 SSH 回滚脚本失败"
+  bash "$rollback" "$SST_WIZARD_STATE" || die "SSH 回滚失败"
   wizard_set SSH_STATUS rolledback
   wizard_mark ssh skipped
   ok "SSH 配置已回滚"

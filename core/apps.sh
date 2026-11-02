@@ -8,6 +8,7 @@ declare -A SST_APP_PORT=() SST_APP_URL=() SST_APP_DIR=()
 SST_APP_ORDER=()
 
 sst_load_apps() {
+  [[ ${SST_BUNDLED:-0} -eq 1 ]] && return 0
   SST_APP_ORDER=()
   SST_APP_TITLE=() SST_APP_DESC=() SST_APP_CATEGORY=()
   SST_APP_PORT=() SST_APP_URL=() SST_APP_DIR=()

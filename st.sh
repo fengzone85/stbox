@@ -10,7 +10,12 @@ while [[ -L $SST_SOURCE ]]; do
   [[ $SST_SOURCE == /* ]] || SST_SOURCE="$SST_LINK_DIR/$SST_SOURCE"
 done
 SST_HOME=$(cd -- "$(dirname -- "$SST_SOURCE")" && pwd -P)
-SST_ENTRY="$SST_HOME/st.sh"
+if [[ ${SST_BUNDLED:-0} -eq 1 ]]; then
+  [[ $SST_SOURCE == /* ]] || SST_SOURCE="$SST_HOME/$(basename -- "$SST_SOURCE")"
+  SST_ENTRY="$SST_SOURCE"
+else
+  SST_ENTRY="$SST_HOME/st.sh"
+fi
 export SST_HOME SST_ENTRY
 export SST_YES=${SST_YES:-0}
 export SST_NO_COLOR=${SST_NO_COLOR:-0}
@@ -34,6 +39,7 @@ done
 export SST_PLAIN SST_UI_ASCII
 set -- "${args[@]}"
 
+# --- bundle:core ---
 # shellcheck source=core/ui.sh
 source "$SST_HOME/core/ui.sh"
 # shellcheck source=core/common.sh
@@ -51,6 +57,7 @@ source "$SST_HOME/core/update.sh"
 # shellcheck source=core/menu.sh
 source "$SST_HOME/core/menu.sh"
 
+# --- bundle:entry ---
 sst_init_dirs
 sst_detect_os
 sst_load_scripts

@@ -3,6 +3,7 @@
 面向 Linux 服务器的模块化脚本工具箱，使用 Bash 编写，同时提供交互菜单和命令行调用。
 
 - 分层结构：核心框架 + 内置模块 + 应用/脚本插件
+- 支持源码模块化与单文件发布两种形态，单文件数据目录独立
 - 14 个功能模块、12 个 Docker 应用、72 个外部脚本入口
 - 已在 Debian 13 / Intel J4125 完成主要功能实测
 - 所有系统级操作默认需要确认，配置变更前自动备份
@@ -36,6 +37,33 @@
 
 ## 安装
 
+### 单文件（推荐）
+
+无需克隆仓库，直接下载并安装为 `st`：
+
+```bash
+curl -fsSL cdn.jsdelivr.net/gh/fengzone85/stbox/i.sh | sudo bash
+```
+
+GitHub 可访问时也可使用：
+
+```bash
+curl -fsSL github.com/fengzone85/stbox/raw/main/i.sh | sudo bash
+```
+
+也可以不安装，直接运行：
+
+```bash
+curl -fsSL cdn.jsdelivr.net/gh/fengzone85/stbox/stbox.sh | sudo bash
+```
+
+> 不要使用 `sudo bash <(curl ...)`：sudo 会关闭进程替换的文件描述符，导致脚本读取失败。
+
+单文件版本的数据目录为 `/var/lib/stbox`（非 root 用户为 `~/.local/share/stbox`），
+更新使用 `st settings update`，会校验 SHA256 并保留 `st.bak`。
+
+### 源码安装
+
 ```bash
 git clone https://github.com/fengzone85/stbox.git
 cd stbox
@@ -51,7 +79,7 @@ st --no-color version
 st --plain version # 无色、ASCII 边框
 ```
 
-默认安装目录 `/opt/ssh-tools`，配置、数据、日志目录权限为 700，属主 root。
+源码安装默认目录 `/opt/ssh-tools`，配置、数据、日志目录权限为 700，属主 root。
 
 ## 界面预览
 
@@ -59,7 +87,10 @@ st --plain version # 无色、ASCII 边框
 ╭─ STBOX 0.5.0 ────────────────────────────────────────╮
 │ SSH Tool Box · Debian 13 · 内核 6.1                  │
 │ feng-5100 · SSH 22 · UFW active · BBR bbr            │
-│ 开荒向导 3/8 完成 · 下一步：账户设置                 │
+│ GitHub github.com/fengzone85/stbox                       │
+│ 一键安装 curl -fsSL \                                   │
+│          cdn.jsdelivr.net/gh/fengzone85/stbox/i.sh | \   │
+│          sudo bash                                       │
 ╰──────────────────────────────────────────────────────╯
 
 │ 开荒向导 3/8 完成 · 下一步：账户设置
@@ -248,14 +279,22 @@ demo_info() { echo "info"; }
 语法检查：
 
 ```bash
-bash -n st.sh install.sh core/*.sh modules/*.sh apps/*/app.sh scripts/*.conf
+bash -n st.sh install.sh build.sh i.sh core/*.sh modules/*.sh apps/*/app.sh scripts/*.conf
 bash tests/ui.sh
 bash tests/scripts.sh
 bash tests/ai.sh
 bash tests/apps.sh
 bash tests/menu.sh
 bash tests/config.sh
+bash tests/bundle.sh
 sudo bash tests/init_hardening.sh
+```
+
+单文件产物由 `build.sh` 生成，修改源码后需要重新构建：
+
+```bash
+bash build.sh          # 生成 stbox.sh + stbox.sh.sha256
+bash build.sh --check  # 校验产物是否与源码一致
 ```
 
 ## 文档

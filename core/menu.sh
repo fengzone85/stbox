@@ -22,6 +22,10 @@ sst_register_module() {
 }
 
 sst_load_modules() {
+  if [[ ${SST_BUNDLED:-0} -eq 1 ]]; then
+    sst_sort_modules
+    return 0
+  fi
   local f
   for f in "$SST_HOME"/modules/*.sh; do
     [[ -f $f ]] || continue
@@ -84,12 +88,16 @@ sst_banner_status() {
 
 sst_print_banner() {
   [[ -n ${SST_BANNER_KERNEL:-} ]] || SST_BANNER_KERNEL=$(uname -r 2>/dev/null || printf '未知')
-  local inner line1 line2 line3
+  local inner line1 line2 line3 line4 line5 line6 line7
   inner=$(( $(ui_frame_width) - 4 ))
   line1=$(ui_fit "SSH Tool Box · ${OS_NAME} · 内核 ${SST_BANNER_KERNEL}" "$inner")
   line2=$(ui_fit "$(sst_banner_status)" "$inner")
   line3=$(ui_fit "开荒向导 $(wizard_progress_meta)" "$inner")
-  ui_panel "STBOX ${SST_VERSION}" "$line1" "$line2" "$line3"
+  line4=$(ui_fit "GitHub github.com/fengzone85/stbox" "$inner")
+  line5=$(ui_fit "一键安装 curl -fsSL \\" "$inner")
+  line6=$(ui_fit "         cdn.jsdelivr.net/gh/fengzone85/stbox/i.sh | \\" "$inner")
+  line7=$(ui_fit "         sudo bash" "$inner")
+  ui_panel "STBOX ${SST_VERSION}" "$line1" "$line2" "$line3" "$line4" "$line5" "$line6" "$line7"
 }
 
 sst_module_help() {
@@ -341,6 +349,11 @@ sst_dispatch() {
 
   local cmd=$1
   shift
+
+  if [[ $cmd == install && ${SST_BUNDLED:-0} -eq 1 ]]; then
+    stbox_self_install
+    return 0
+  fi
 
   case $cmd in
     version|--version|-v) version_info; return 0 ;;
