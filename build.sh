@@ -7,6 +7,7 @@ set -euo pipefail
 
 SST_HOME=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
 cd "$SST_HOME"
+export LC_ALL=C
 
 OUT="$SST_HOME/stbox.sh"
 SHA_FILE="$SST_HOME/stbox.sh.sha256"
