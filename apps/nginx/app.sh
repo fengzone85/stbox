@@ -5,6 +5,10 @@ app_nginx_install() {
   docker_require || return 1
   local dir
   dir=$(app_data_dir nginx)
+  if ! docker ps --format '{{.Names}}' 2>/dev/null | grep -Fxq sst-nginx \
+    && ss -tln 2>/dev/null | awk '{print $4}' | grep -qE ':80$'; then
+    die "80 端口已被占用：请先停止 Nginx Proxy Manager、建站环境或系统 Nginx/Apache 再部署"
+  fi
   mkdir -p "$dir/html"
   if [[ ! -f $dir/html/index.html ]]; then
     cat >"$dir/html/index.html" <<'HTML'
@@ -30,6 +34,7 @@ services:
       - ./html:/usr/share/nginx/html:ro
 YAML
   ok "Nginx 已启动：http://$(get_public_ip):80"
+  warn "占用宿主机 80 端口，请勿与 Nginx Proxy Manager / 建站环境同时部署"
   info "修改页面：$dir/html/index.html"
 }
 

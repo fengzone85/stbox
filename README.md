@@ -4,7 +4,7 @@
 
 - 分层结构：核心框架 + 内置模块 + 应用/脚本插件
 - 支持源码模块化与单文件发布两种形态，单文件数据目录独立
-- 14 个功能模块、12 个 Docker 应用、72 个外部脚本入口
+- 15 个功能模块、12 个 Docker 应用、71 个外部脚本入口
 - 已在 Debian 13 / Intel J4125 完成主要功能实测
 - 所有系统级操作默认需要确认，配置变更前自动备份
 
@@ -20,8 +20,9 @@
 | Docker | 安装、状态、容器、日志、进入容器、镜像、网络、数据卷、Compose 项目启停/更新、清理、卸载 |
 | 应用市场 | 一键部署常用 Docker 应用 |
 | 建站环境 | Apache + PHP 8.2 + MariaDB + Redis，静态站、WordPress、反向代理、SSL、站点备份 |
+| 节点搭建 | Sing-box、Xray Reality、Hysteria2、Tuic、Juicity、X-UI/3X-UI、ArgoX 等节点脚本入口 |
 | AI 工具 | Claude Code、Codex、Gemini CLI、Qoder 国际版/CN、CodeBuddy 国际版/国内版、Grok Build、OpenCode、OpenClaw、Hermes、Pi、MiniMax Code、Kimi Code、Oh My Pi、CC Switch CLI 部署 |
-| 实用工具 | 磁盘挂载、Git、Rclone、Fclone、WARP、BBR3、Nezha/Komari/Diting 探针、节点/面板/代理/甲骨文/NAT/多套 DD 重装入口 |
+| 实用工具 | 磁盘挂载、Git、Rclone、Fclone、WARP、BBR3、Nezha/Komari/Diting 探针、面板/代理/甲骨文/NAT/多套 DD 重装入口 |
 | 组件环境 | 22 个常用组件与游戏、Python/Node.js/Go/Java、Ansible、tmux 工作区 |
 | 安全与优化 | UFW/firewalld、SSH 端口与登录策略、BBR、Fail2ban |
 | 备份迁移 | 目录备份、MySQL 导出、恢复、定时任务、远程传输 |
@@ -88,9 +89,6 @@ st --plain version # 无色、ASCII 边框
 │ SSH Tool Box · Debian 13 · 内核 6.1                  │
 │ feng-5100 · SSH 22 · UFW active · BBR bbr            │
 │ GitHub github.com/fengzone85/stbox                       │
-│ 一键安装 curl -fsSL \                                   │
-│          cdn.jsdelivr.net/gh/fengzone85/stbox/i.sh | \   │
-│          sudo bash                                       │
 ╰──────────────────────────────────────────────────────╯
 
 │ 开荒向导 3/8 完成 · 下一步：账户设置
@@ -156,7 +154,12 @@ st components list
 printf '5\n' | sudo st --yes components install    # 安装 htop
 st tools disk_mount
 st tools rclone
-st tools nodes
+st nodes list
+
+# 节点搭建
+st nodes singbox
+st nodes hysteria2
+st nodes xui
 
 # 安全与备份
 st security status
@@ -249,7 +252,7 @@ stbox/
 ├── st.sh               # 入口
 ├── install.sh          # 安装脚本
 ├── core/               # 框架：界面组件、公共函数、配置、菜单、脚本市场
-├── modules/            # 12 个功能模块
+├── modules/            # 15 个功能模块
 ├── apps/               # Docker 应用插件
 ├── scripts/            # 第三方脚本清单
 ├── plugins/            # 用户扩展（apps/scripts）
@@ -300,6 +303,10 @@ bash build.sh --check  # 校验产物是否与源码一致
 ## 文档
 
 - [设计文档](docs/design.md)：架构、模块契约、应用/脚本插件、安全设计、命令规范
+
+## 许可
+
+本项目基于 [MIT License](LICENSE) 开源。
 
 ## 风险声明
 

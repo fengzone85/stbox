@@ -99,6 +99,7 @@ stbox/
 │   ├── docker.sh          # 安装 / 状态 / 容器 / 镜像 / 网络 / 卷 / 清理
 │   ├── apps.sh            # 应用市场
 │   ├── site.sh            # 建站环境（静态站 / WordPress / 反代 / SSL）
+│   ├── nodes.sh           # 节点搭建（Sing-box / Xray / Hysteria2 / Tuic 等脚本入口）
 │   ├── ai.sh              # Claude Code / Codex / Gemini / OpenCode 等 AI 工具
 │   ├── tools.sh           # 磁盘挂载 / Git / Rclone / 探针面板代理入口
 │   ├── components.sh      # 常用组件 / Python Node Go Java / tmux 工作区
@@ -297,9 +298,11 @@ st docker   status | install | ps | logs [容器] | restart|start|stop|exec [容
             images | networks | volumes | prune | compose | uninstall
 st apps     list | menu | install <名称> | remove <名称> | status <名称>
 st site     install | status | add | wordpress | proxy | ssl | list | remove | backup | update | uninstall
+st nodes    list | singbox | singbox-233boy | singbox-yg | hysteria2 | tuic | juicity
+            reality | xray2go | xui | 3xui | sui | argox | suoha | openvpn | tgproxy
 st ai       status | list | install [工具] | version | update [工具] | remove [工具]
-            快捷安装：claude | codex | gemini | qoder | codebuddy | opencode | ccswitch
-st tools    disk_mount | git | rclone | fclone | scripts | probes | panels | nodes | proxy | kernel
+            快捷安装：claude | codex | gemini | qoder | qodercn | codebuddy | codebuddycn | opencode | ccswitch
+st tools    disk_mount | git | rclone | fclone | scripts | probes | panels | proxy | kernel
             warp | bbr3 | oracle | reinstall | nat | <脚本名>
 st components list | install | install_all | remove | custom
             python | nodejs | golang | java | uninstall_env | workspace

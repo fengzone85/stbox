@@ -30,7 +30,7 @@ declare -gA AI_CMD=(
   [qoder]=qodercli
   [qodercn]=qoderclicn
   [codebuddy]=codebuddy
-  [codebuddycn]=codebuddy
+  [codebuddycn]=codebuddy-cn
   [grok]=grok
   [opencode]=opencode
   [openclaw]=openclaw
@@ -84,7 +84,7 @@ declare -gA AI_DESC=(
   [qoder]="Qoder 国际版终端 Agent"
   [qodercn]="Qoder CN（原通义灵码）终端 Agent"
   [codebuddy]="腾讯 CodeBuddy 国际版 CLI"
-  [codebuddycn]="腾讯 CodeBuddy 国内版 CLI（同一命令，国内登录）"
+  [codebuddycn]="腾讯 CodeBuddy 国内版 CLI（命令 codebuddy-cn）"
   [grok]="xAI Grok Build 终端助手"
   [opencode]="开源终端 AI 编程工具"
   [openclaw]="开源 AI 助手与工作区"
@@ -114,6 +114,19 @@ declare -gA AI_DOC=(
   [ccswitch]="https://github.com/SaladDay/cc-switch-cli"
 )
 
+AI_CODEBUDDY_CN_BIN=/usr/local/bin/codebuddy-cn
+
+# 国内版与国际版共用官方包，通过包装命令注入国内环境
+ai_codebuddycn_wrapper() {
+  mkdir -p "$(dirname "$AI_CODEBUDDY_CN_BIN")" || return 1
+  cat >"$AI_CODEBUDDY_CN_BIN" <<'EOF'
+#!/usr/bin/env bash
+export CODEBUDDY_INTERNET_ENVIRONMENT=internal
+exec codebuddy "$@"
+EOF
+  chmod 755 "$AI_CODEBUDDY_CN_BIN"
+}
+
 ai_require_node() {
   have npm && return 0
   info "未检测到 npm，先安装 Node.js 与 npm…"
@@ -128,7 +141,7 @@ ai_after_install_hint() {
     qodercn) info "Qoder CN 首次运行：qoderclicn" ;;
     codebuddy) info "CodeBuddy 国际版首次运行：codebuddy，登录时选择国际站" ;;
     codebuddycn)
-      info "CodeBuddy 国内版：codebuddy 登录时选择国内站，或设置 CODEBUDDY_INTERNET_ENVIRONMENT=internal"
+      info "CodeBuddy 国内版首次运行：codebuddy-cn（已注入国内环境），登录时选择国内站"
       ;;
   esac
 }
@@ -144,6 +157,9 @@ ai_install_npm() {
     confirm "通过 npm 安装 $title（$pkg）？" || return 0
   fi
   if npm install -g "$pkg"; then
+    if [[ $id == codebuddycn ]]; then
+      ai_codebuddycn_wrapper || { warn "创建 $AI_CODEBUDDY_CN_BIN 失败"; return 1; }
+    fi
     ok "$title 安装完成：$(command -v "$cmd")"
     ai_after_install_hint "$id"
   else
@@ -303,9 +319,16 @@ ai_remove_tool() {
   case ${AI_KIND[$id]} in
     npm)
       require_root
-      [[ $id == codebuddy || $id == codebuddycn ]] && warn "CodeBuddy 国际版/国内版共用同一命令，卸载后两者均不可用"
+      if [[ $id == codebuddycn ]]; then
+        confirm "移除国内版命令 $AI_CODEBUDDY_CN_BIN（保留共享的 CodeBuddy 包）？" || return 0
+        rm -f "$AI_CODEBUDDY_CN_BIN"
+        ok "已移除 codebuddy-cn；国际版 codebuddy 不受影响"
+        return 0
+      fi
+      [[ $id == codebuddy ]] && warn "国内版 codebuddy-cn 依赖同一安装包，卸载后 codebuddy-cn 也将不可用"
       confirm "卸载 $title（npm uninstall -g ${AI_SOURCE[$id]}）？" || return 0
       if npm uninstall -g "${AI_SOURCE[$id]}"; then
+        [[ $id == codebuddy ]] && rm -f "$AI_CODEBUDDY_CN_BIN"
         ok "$title 已卸载"
       else
         warn "$title 卸载失败"

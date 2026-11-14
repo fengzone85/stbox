@@ -56,8 +56,8 @@ fi
 
 section "内嵌清单"
 check_eq "应用数量" 12 "$(grep -c '^SST_APP_ORDER+=(' "$BUNDLE")"
-check_eq "脚本数量" 72 "$(grep -c '^SST_SCRIPT_ORDER+=(' "$BUNDLE")"
-check_eq "模块数量" 14 "$(grep -c '^SST_MODULE_ITEMS\[' "$BUNDLE")"
+check_eq "脚本数量" 71 "$(grep -c '^SST_SCRIPT_ORDER+=(' "$BUNDLE")"
+check_eq "模块数量" 15 "$(grep -c '^SST_MODULE_ITEMS\[' "$BUNDLE")"
 grep -q 'stbox_write_ssh_rollback' "$BUNDLE" && pass "包含 SSH 回滚脚本生成器" || fail "缺少 SSH 回滚脚本生成器"
 
 section "运行入口"

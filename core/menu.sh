@@ -5,7 +5,7 @@ declare -A SST_MODULE_TITLE=() SST_MODULE_DESC=() SST_MODULE_ITEMS=()
 declare -A SST_MODULE_GROUP=(
   [init]=0
   [system]=1 [network]=1 [tune]=1 [bench]=1
-  [docker]=2 [apps]=2 [site]=2 [ai]=2
+  [docker]=2 [apps]=2 [site]=2 [nodes]=2 [ai]=2
   [security]=3 [backup]=3 [tools]=3 [components]=3
   [settings]=4
 )
@@ -37,7 +37,7 @@ sst_load_modules() {
 
 # 主菜单顺序；未列出的模块按注册顺序追加
 sst_sort_modules() {
-  local -a preferred=(init system network tune bench docker apps site ai security backup tools components settings)
+  local -a preferred=(init system network tune bench docker apps site nodes ai security backup tools components settings)
   local -a sorted=()
   local name
   for name in "${preferred[@]}"; do
@@ -88,16 +88,13 @@ sst_banner_status() {
 
 sst_print_banner() {
   [[ -n ${SST_BANNER_KERNEL:-} ]] || SST_BANNER_KERNEL=$(uname -r 2>/dev/null || printf '未知')
-  local inner line1 line2 line3 line4 line5 line6 line7
+  local inner line1 line2 line3 line4
   inner=$(( $(ui_frame_width) - 4 ))
   line1=$(ui_fit "SSH Tool Box · ${OS_NAME} · 内核 ${SST_BANNER_KERNEL}" "$inner")
   line2=$(ui_fit "$(sst_banner_status)" "$inner")
   line3=$(ui_fit "开荒向导 $(wizard_progress_meta)" "$inner")
   line4=$(ui_fit "GitHub github.com/fengzone85/stbox" "$inner")
-  line5=$(ui_fit "一键安装 curl -fsSL \\" "$inner")
-  line6=$(ui_fit "         cdn.jsdelivr.net/gh/fengzone85/stbox/i.sh | \\" "$inner")
-  line7=$(ui_fit "         sudo bash" "$inner")
-  ui_panel "STBOX ${SST_VERSION}" "$line1" "$line2" "$line3" "$line4" "$line5" "$line6" "$line7"
+  ui_panel "STBOX ${SST_VERSION}" "$line1" "$line2" "$line3" "$line4"
 }
 
 sst_module_help() {
@@ -133,14 +130,15 @@ sst_help() {
     docker    Docker 管理   st docker status | install | ps | exec | images | networks | volumes | compose | prune | uninstall
     apps      应用市场      st apps list | menu | install <名称> | remove <名称> | status <名称>
     site     建站环境      st site install | status | add | wordpress | proxy | ssl | list | remove | backup | uninstall
+    nodes    节点搭建      st nodes list | singbox | hysteria2 | tuic | xui | <脚本名>
     ai        AI 工具       st ai status | list | install [工具] | version | update [工具] | remove [工具]
-                             快捷安装：st ai claude | codex | gemini | qoder | codebuddy | ccswitch
+                             快捷安装：st ai claude | codex | gemini | qoder | codebuddy | codebuddycn | ccswitch
 
   安全与运维
     security  安全与优化    st security status | firewall_status | firewall_allow <端口>
                              BBR/SSH/Fail2ban：st security bbr_on | ssh_status | fail2ban_install
     backup    备份与迁移    st backup list | create [路径...] | restore | schedule | remote
-    tools     实用工具      st tools disk_mount | git | rclone | probes | panels | nodes | proxy | kernel | oracle | nat
+    tools     实用工具      st tools disk_mount | git | rclone | probes | panels | proxy | kernel | oracle | nat
     components 组件环境     st components list | install | install_all | remove | python | nodejs | golang | java | workspace
 
   设置

@@ -1496,7 +1496,7 @@ declare -A SST_MODULE_TITLE=() SST_MODULE_DESC=() SST_MODULE_ITEMS=()
 declare -A SST_MODULE_GROUP=(
   [init]=0
   [system]=1 [network]=1 [tune]=1 [bench]=1
-  [docker]=2 [apps]=2 [site]=2 [ai]=2
+  [docker]=2 [apps]=2 [site]=2 [nodes]=2 [ai]=2
   [security]=3 [backup]=3 [tools]=3 [components]=3
   [settings]=4
 )
@@ -1528,7 +1528,7 @@ sst_load_modules() {
 
 # 主菜单顺序；未列出的模块按注册顺序追加
 sst_sort_modules() {
-  local -a preferred=(init system network tune bench docker apps site ai security backup tools components settings)
+  local -a preferred=(init system network tune bench docker apps site nodes ai security backup tools components settings)
   local -a sorted=()
   local name
   for name in "${preferred[@]}"; do
@@ -1579,16 +1579,13 @@ sst_banner_status() {
 
 sst_print_banner() {
   [[ -n ${SST_BANNER_KERNEL:-} ]] || SST_BANNER_KERNEL=$(uname -r 2>/dev/null || printf '未知')
-  local inner line1 line2 line3 line4 line5 line6 line7
+  local inner line1 line2 line3 line4
   inner=$(( $(ui_frame_width) - 4 ))
   line1=$(ui_fit "SSH Tool Box · ${OS_NAME} · 内核 ${SST_BANNER_KERNEL}" "$inner")
   line2=$(ui_fit "$(sst_banner_status)" "$inner")
   line3=$(ui_fit "开荒向导 $(wizard_progress_meta)" "$inner")
   line4=$(ui_fit "GitHub github.com/fengzone85/stbox" "$inner")
-  line5=$(ui_fit "一键安装 curl -fsSL \\" "$inner")
-  line6=$(ui_fit "         cdn.jsdelivr.net/gh/fengzone85/stbox/i.sh | \\" "$inner")
-  line7=$(ui_fit "         sudo bash" "$inner")
-  ui_panel "STBOX ${SST_VERSION}" "$line1" "$line2" "$line3" "$line4" "$line5" "$line6" "$line7"
+  ui_panel "STBOX ${SST_VERSION}" "$line1" "$line2" "$line3" "$line4"
 }
 
 sst_module_help() {
@@ -1624,14 +1621,15 @@ sst_help() {
     docker    Docker 管理   st docker status | install | ps | exec | images | networks | volumes | compose | prune | uninstall
     apps      应用市场      st apps list | menu | install <名称> | remove <名称> | status <名称>
     site     建站环境      st site install | status | add | wordpress | proxy | ssl | list | remove | backup | uninstall
+    nodes    节点搭建      st nodes list | singbox | hysteria2 | tuic | xui | <脚本名>
     ai        AI 工具       st ai status | list | install [工具] | version | update [工具] | remove [工具]
-                             快捷安装：st ai claude | codex | gemini | qoder | codebuddy | ccswitch
+                             快捷安装：st ai claude | codex | gemini | qoder | codebuddy | codebuddycn | ccswitch
 
   安全与运维
     security  安全与优化    st security status | firewall_status | firewall_allow <端口>
                              BBR/SSH/Fail2ban：st security bbr_on | ssh_status | fail2ban_install
     backup    备份与迁移    st backup list | create [路径...] | restore | schedule | remote
-    tools     实用工具      st tools disk_mount | git | rclone | probes | panels | nodes | proxy | kernel | oracle | nat
+    tools     实用工具      st tools disk_mount | git | rclone | probes | panels | proxy | kernel | oracle | nat
     components 组件环境     st components list | install | install_all | remove | python | nodejs | golang | java | workspace
 
   设置
@@ -1900,7 +1898,7 @@ declare -gA AI_CMD=(
   [qoder]=qodercli
   [qodercn]=qoderclicn
   [codebuddy]=codebuddy
-  [codebuddycn]=codebuddy
+  [codebuddycn]=codebuddy-cn
   [grok]=grok
   [opencode]=opencode
   [openclaw]=openclaw
@@ -1954,7 +1952,7 @@ declare -gA AI_DESC=(
   [qoder]="Qoder 国际版终端 Agent"
   [qodercn]="Qoder CN（原通义灵码）终端 Agent"
   [codebuddy]="腾讯 CodeBuddy 国际版 CLI"
-  [codebuddycn]="腾讯 CodeBuddy 国内版 CLI（同一命令，国内登录）"
+  [codebuddycn]="腾讯 CodeBuddy 国内版 CLI（命令 codebuddy-cn）"
   [grok]="xAI Grok Build 终端助手"
   [opencode]="开源终端 AI 编程工具"
   [openclaw]="开源 AI 助手与工作区"
@@ -1984,6 +1982,19 @@ declare -gA AI_DOC=(
   [ccswitch]="https://github.com/SaladDay/cc-switch-cli"
 )
 
+AI_CODEBUDDY_CN_BIN=/usr/local/bin/codebuddy-cn
+
+# 国内版与国际版共用官方包，通过包装命令注入国内环境
+ai_codebuddycn_wrapper() {
+  mkdir -p "$(dirname "$AI_CODEBUDDY_CN_BIN")" || return 1
+  cat >"$AI_CODEBUDDY_CN_BIN" <<'EOF'
+#!/usr/bin/env bash
+export CODEBUDDY_INTERNET_ENVIRONMENT=internal
+exec codebuddy "$@"
+EOF
+  chmod 755 "$AI_CODEBUDDY_CN_BIN"
+}
+
 ai_require_node() {
   have npm && return 0
   info "未检测到 npm，先安装 Node.js 与 npm…"
@@ -1998,7 +2009,7 @@ ai_after_install_hint() {
     qodercn) info "Qoder CN 首次运行：qoderclicn" ;;
     codebuddy) info "CodeBuddy 国际版首次运行：codebuddy，登录时选择国际站" ;;
     codebuddycn)
-      info "CodeBuddy 国内版：codebuddy 登录时选择国内站，或设置 CODEBUDDY_INTERNET_ENVIRONMENT=internal"
+      info "CodeBuddy 国内版首次运行：codebuddy-cn（已注入国内环境），登录时选择国内站"
       ;;
   esac
 }
@@ -2014,6 +2025,9 @@ ai_install_npm() {
     confirm "通过 npm 安装 $title（$pkg）？" || return 0
   fi
   if npm install -g "$pkg"; then
+    if [[ $id == codebuddycn ]]; then
+      ai_codebuddycn_wrapper || { warn "创建 $AI_CODEBUDDY_CN_BIN 失败"; return 1; }
+    fi
     ok "$title 安装完成：$(command -v "$cmd")"
     ai_after_install_hint "$id"
   else
@@ -2173,9 +2187,16 @@ ai_remove_tool() {
   case ${AI_KIND[$id]} in
     npm)
       require_root
-      [[ $id == codebuddy || $id == codebuddycn ]] && warn "CodeBuddy 国际版/国内版共用同一命令，卸载后两者均不可用"
+      if [[ $id == codebuddycn ]]; then
+        confirm "移除国内版命令 $AI_CODEBUDDY_CN_BIN（保留共享的 CodeBuddy 包）？" || return 0
+        rm -f "$AI_CODEBUDDY_CN_BIN"
+        ok "已移除 codebuddy-cn；国际版 codebuddy 不受影响"
+        return 0
+      fi
+      [[ $id == codebuddy ]] && warn "国内版 codebuddy-cn 依赖同一安装包，卸载后 codebuddy-cn 也将不可用"
       confirm "卸载 $title（npm uninstall -g ${AI_SOURCE[$id]}）？" || return 0
       if npm uninstall -g "${AI_SOURCE[$id]}"; then
+        [[ $id == codebuddy ]] && rm -f "$AI_CODEBUDDY_CN_BIN"
         ok "$title 已卸载"
       else
         warn "$title 卸载失败"
@@ -5059,6 +5080,14 @@ network_listen() {
   fi
 }
 
+# --- modules/nodes.sh ---
+# 模块：节点搭建（Sing-box / Xray / Hysteria2 / Tuic 等脚本入口）
+
+sst_register_module nodes "节点搭建" "Sing-box Xray Hysteria2 Tuic 等"
+SST_MODULE_ITEMS[nodes]=$'list|全部节点脚本\nsingbox|F佬 Sing-box\nsingbox-233boy|233boy Sing-box\nsingbox-yg|勇哥 Sing-box\nhysteria2|Hysteria2\ntuic|Tuic v5\njuicity|Juicity\nreality|Xray Reality\nxray2go|Xray-2go\nxui|X-UI\n3xui|3X-UI\nsui|S-UI 面板\nargox|ArgoX\nsuoha|Suoha Argo\nopenvpn|OpenVPN\ntgproxy|TG 代理'
+
+nodes_list() { scripts_menu 节点; }
+
 # --- modules/security.sh ---
 # 模块：安全与优化
 
@@ -6503,10 +6532,10 @@ system_shortcut() {
 }
 
 # --- modules/tools.sh ---
-# 模块：实用工具（磁盘挂载、常用软件、探针/面板/节点/代理脚本入口）
+# 模块：实用工具（磁盘挂载、常用软件、探针/面板/代理脚本入口）
 
 sst_register_module tools "实用工具" "磁盘 工具 探针 面板 代理"
-SST_MODULE_ITEMS[tools]=$'disk_mount|磁盘挂载与 fstab\ngit|安装/升级 Git\nrclone|安装 Rclone\nfclone|Fclone 安装\nscripts|第三方工具脚本\naria2|Aria2 安装管理\nipt|IPTables 工具\nchangesource|第三方换源脚本\nprobes|监控探针（Nezha/Komari/Diting）\npanels|面板安装脚本\nnodes|节点搭建脚本合集\nproxy|代理与转发脚本\nkernel|内核与 BBR 脚本\nbbr3|BBR3/tcpx 管理\nbbrmanage|BBR 一键管理\nbbrkernel|BBR 内核（CentOS）\nwarp|WARP 管理（ChatGPT/Netflix）\nmtp|MTP&TLS 代理\nnezha|哪吒探针\nkomari|Komari 探针\nditing|Diting 探针\nbaota|宝塔面板\noracle|甲骨文云脚本\nreinstall|DD/重装脚本\nnat|NAT 小鸡管理'
+SST_MODULE_ITEMS[tools]=$'disk_mount|磁盘挂载与 fstab\ngit|安装/升级 Git\nrclone|安装 Rclone\nfclone|Fclone 安装\nscripts|第三方工具脚本\naria2|Aria2 安装管理\nipt|IPTables 工具\nchangesource|第三方换源脚本\nprobes|监控探针（Nezha/Komari/Diting）\npanels|面板安装脚本\nproxy|代理与转发脚本\nkernel|内核与 BBR 脚本\nbbr3|BBR3/tcpx 管理\nbbrmanage|BBR 一键管理\nbbrkernel|BBR 内核（CentOS）\nwarp|WARP 管理（ChatGPT/Netflix）\nmtp|MTP&TLS 代理\nnezha|哪吒探针\nkomari|Komari 探针\nditing|Diting 探针\nbaota|宝塔面板\noracle|甲骨文云脚本\nreinstall|DD/重装脚本\nnat|NAT 小鸡管理'
 
 tools_disk_mount() {
   require_root
@@ -6655,7 +6684,6 @@ tools_scripts() { scripts_menu 工具; }
 tools_warp() { scripts_run warp; }
 tools_bbr3() { scripts_run bbr3; }
 tools_probes() { scripts_menu 探针; }
-tools_nodes() { scripts_menu 节点; }
 tools_panels() { scripts_menu 面板; }
 tools_proxy() { scripts_menu 代理; }
 tools_kernel() { scripts_menu 内核; }
@@ -7351,6 +7379,10 @@ app_nginx_install() {
   docker_require || return 1
   local dir
   dir=$(app_data_dir nginx)
+  if ! docker ps --format '{{.Names}}' 2>/dev/null | grep -Fxq sst-nginx \
+    && ss -tln 2>/dev/null | awk '{print $4}' | grep -qE ':80$'; then
+    die "80 端口已被占用：请先停止 Nginx Proxy Manager、建站环境或系统 Nginx/Apache 再部署"
+  fi
   mkdir -p "$dir/html"
   if [[ ! -f $dir/html/index.html ]]; then
     cat >"$dir/html/index.html" <<'HTML'
@@ -7376,6 +7408,7 @@ services:
       - ./html:/usr/share/nginx/html:ro
 YAML
   ok "Nginx 已启动：http://$(get_public_ip):80"
+  warn "占用宿主机 80 端口，请勿与 Nginx Proxy Manager / 建站环境同时部署"
   info "修改页面：$dir/html/index.html"
 }
 
@@ -7918,17 +7951,6 @@ SST_SCRIPT_RISK[image]=$'\351\253\230'
 SST_SCRIPT_SHA256[image]=''
 SST_SCRIPT_ARCH[image]=''
 SST_SCRIPT_ORDER+=('image')
-SST_SCRIPT_TITLE[ipcheck]=$'IP \350\264\250\351\207\217\344\275\223\346\243\200\357\274\210Check.Place\357\274\211'
-SST_SCRIPT_DESC[ipcheck]=$'IP \351\243\216\351\231\251\343\200\201\345\216\237\347\224\237\346\200\247\343\200\201\346\265\201\345\252\222\344\275\223\344\270\216\347\275\221\347\273\234\350\264\250\351\207\217\346\243\200\346\265\213'
-SST_SCRIPT_CATEGORY[ipcheck]=$'\346\265\213\350\257\225'
-SST_SCRIPT_URL[ipcheck]=https://IP.Check.Place
-SST_SCRIPT_MODE[ipcheck]=bash
-SST_SCRIPT_ARG[ipcheck]=''
-SST_SCRIPT_ROOT[ipcheck]=1
-SST_SCRIPT_RISK[ipcheck]=$'\344\270\255'
-SST_SCRIPT_SHA256[ipcheck]=''
-SST_SCRIPT_ARCH[ipcheck]=''
-SST_SCRIPT_ORDER+=('ipcheck')
 SST_SCRIPT_TITLE[ipquality]=$'IP \350\264\250\351\207\217\344\275\223\346\243\200'
 SST_SCRIPT_DESC[ipquality]=$'xykt IPQuality\357\274\232IP \351\243\216\351\231\251\343\200\201\346\254\272\350\257\210\345\200\274\343\200\201\346\265\201\345\252\222\344\275\223\344\270\216\347\253\257\345\217\243\346\243\200\346\265\213'
 SST_SCRIPT_CATEGORY[ipquality]=$'\346\265\213\350\257\225'
